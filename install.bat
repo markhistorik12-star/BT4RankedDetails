@@ -29,6 +29,9 @@ copy /Y "%SRC%history\app.css" "%DST%\ranked_details\history\app.css" >nul
 copy /Y "%SRC%history\build-history.py" "%DST%\ranked_details\history\build-history.py" >nul
 copy /Y "%SRC%history\refresh.bat" "%DST%\ranked_details\history\refresh.bat" >nul
 if exist "%SRC%history\vendor\*" copy /Y "%SRC%history\vendor\*" "%DST%\ranked_details\history\vendor\" >nul
+if not exist "%DST%\ranked_details\BT4RankedDetails.ini" (
+  if exist "%SRC%BT4RankedDetails.ini" copy /Y "%SRC%BT4RankedDetails.ini" "%DST%\ranked_details\BT4RankedDetails.ini" >nul
+)
 if not exist "%DST%\ranked_details\history\data.js" (
   if exist "%SRC%history\data.js" copy /Y "%SRC%history\data.js" "%DST%\ranked_details\history\data.js" >nul
 )
