@@ -21,6 +21,7 @@ copy /Y "%SRC%mod_lua\bt4_ranked_details\mod.lua" "%DST%\mods\bt4_ranked_details
 
 if not exist "%DST%\ranked_details\history" mkdir "%DST%\ranked_details\history"
 if not exist "%DST%\ranked_details\history\vendor" mkdir "%DST%\ranked_details\history\vendor"
+if not exist "%DST%\ranked_details\history\chars" mkdir "%DST%\ranked_details\history\chars"
 if not exist "%DST%\ranked_details\data" mkdir "%DST%\ranked_details\data"
 
 copy /Y "%SRC%history\index.html" "%DST%\ranked_details\history\index.html" >nul
@@ -29,6 +30,7 @@ copy /Y "%SRC%history\app.css" "%DST%\ranked_details\history\app.css" >nul
 copy /Y "%SRC%history\build-history.py" "%DST%\ranked_details\history\build-history.py" >nul
 copy /Y "%SRC%history\refresh.bat" "%DST%\ranked_details\history\refresh.bat" >nul
 if exist "%SRC%history\vendor\*" copy /Y "%SRC%history\vendor\*" "%DST%\ranked_details\history\vendor\" >nul
+if exist "%SRC%history\chars\*.webp" copy /Y "%SRC%history\chars\*.webp" "%DST%\ranked_details\history\chars\" >nul
 if exist "%SRC%data\characters.tsv" copy /Y "%SRC%data\characters.tsv" "%DST%\ranked_details\data\characters.tsv" >nul
 if not exist "%DST%\ranked_details\BT4RankedDetails.ini" (
   if exist "%SRC%BT4RankedDetails.ini" copy /Y "%SRC%BT4RankedDetails.ini" "%DST%\ranked_details\BT4RankedDetails.ini" >nul

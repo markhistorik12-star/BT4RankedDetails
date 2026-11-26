@@ -92,14 +92,16 @@ private:
             game_hwnd_ = nullptr;
             EnumWindows(find_game_window_cb, reinterpret_cast<LPARAM>(&game_hwnd_));
         }
-        if (!visible || !game_hwnd_ || IsIconic(game_hwnd_)) {
+        if (!visible || !game_hwnd_ || !IsWindowVisible(game_hwnd_) || IsIconic(game_hwnd_)) {
             ShowWindow(hwnd_, SW_HIDE);
             return;
         }
 
-        // Only show when BT4decomp is the foreground window (or show_always is set)
+        // Always hide overlay when BT4decomp is not the active foreground window (even with show_always = 1)
         HWND fg = GetForegroundWindow();
-        if (!cfg.show_always && fg != game_hwnd_ && fg != hwnd_) {
+        DWORD fg_pid = 0;
+        if (fg) GetWindowThreadProcessId(fg, &fg_pid);
+        if (!fg || fg_pid != GetCurrentProcessId()) {
             ShowWindow(hwnd_, SW_HIDE);
             return;
         }
