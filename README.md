@@ -1,4 +1,4 @@
-# BT4 Ranked Details
+# BT4 Rankeds Details
 
 Read-only online latency / rollback HUD overlay and offline match-history viewer for **DBZ BT4 Tag Team Decomp (`BT4decomp`)** — built completely **without Steam** (compatible with BT4decomp's native P2P/WebRTC rollback netcode and Cloudflare Workers / Supabase Ranked backend).
 

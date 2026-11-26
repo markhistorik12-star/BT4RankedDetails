@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <!-- the theme chosen in the header (lib/theme.js), applied before the first paint; file:// storage can throw -->
 <script>try { var t = localStorage.getItem('srd.theme.v1'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
-<title>BT4 Ranked Details - Match History</title>
+<title>BT4 Rankeds Details - Match History</title>
   <script defer src="./app.js"></script>
   <link rel="stylesheet" href="./app.css">
 </head>
@@ -30,9 +30,9 @@
 <dt>W/L</dt><dd><p>Result from your side: <b class="rw">W</b> win, <b class="rl">L</b> loss, <b class="rd">D</b> draw, <b class="ru">?</b> unknown (the match ended without a KO being seen, e.g. a disconnect, or it was recorded before v1.1.0).</p><details class="gmore"><summary>More</summary><p>Win rate counts wins and losses only; hover a result for how the match ended.</p></details></dd>
 <dt>H2H</dt><dd><p>Your head-to-head record against that opponent after that match (W-L, or W-L-D with draws), shown from the second meeting on.</p><details class="gmore"><summary>More</summary><p>It is counted over all matches, whatever the filter.</p></details></dd>
 <dt>Points</dt><dd><p>Ranked points won (<b class="rw">+N</b>) or lost (<b class="rl">-N</b>) in that match, from v1.7.0 on (older matches and matches where no change was seen: –).</p><details class="gmore"><summary>More</summary><p>"(unconfirmed)" = recorded before the source of the value was checked against the number the game showed.</p><details class="tech"><summary>Technical details</summary><p>The mod reads the game's own rank values before the match and after the result (read-only, <code>rank_lookup = 1</code>); hover for the rank and points before → after.</p></details></details></dd>
-<dt>Rank</dt><dd><p>Matches page header: your current total points and rank for Singles and DP (the game's rank name, e.g. <i>Singles 30,326 · Z</i>), plus your current ranked win streak and your longest one (best), read after your newest recorded match; – until a match has recorded it.</p><details class="gmore"><summary>More</summary><p>The match page shows the points of that match under the result (hover: rank and points before → after and the win streak before → after).</p></details></dd>
+<dt>Rank</dt><dd><p>Matches page header: your current total points and rank for Singles and Team (the game's rank name, e.g. <i>Singles 30,326 · Z</i>), plus your current ranked win streak and your longest one (best), read after your newest recorded match; – until a match has recorded it.</p><details class="gmore"><summary>More</summary><p>The match page shows the points of that match under the result (hover: rank and points before → after and the win streak before → after).</p></details></dd>
 <dt>Win streak</dt><dd><p>Yours: from the game's own ranked stats (header, and before → after on the match page).</p><details class="gmore"><summary>More</summary><details class="tech"><summary>Technical details</summary><p>The opponent's (<span class="osk">87W</span> next to their name, "their win streak" on the match page, a tile on the opponent page): read from the game's player card before the fight (v1.8.0, still being verified: the mod reads the player-info texts of the versus / result screen).</p></details></details></dd>
-<dt>Special finish</dt><dd><p><span class="fin">★</span> next to the result: the match (or a DP round) ended with a <b>dramatic finish</b> of an ultimate (e.g. Master Roshi's Evil Containment Wave, Goku's Angry Kamehameha, Dragon Fist, Spirit Bomb; Giant = vs a giant), read from the game's own win type; the match page names the ultimate and who did it, the share picture says "dramatic finish".</p></dd>
+<dt>Special finish</dt><dd><p><span class="fin">★</span> next to the result: the match (or a Team round) ended with a <b>dramatic finish</b> of an ultimate (e.g. Master Roshi's Evil Containment Wave, Goku's Angry Kamehameha, Dragon Fist, Spirit Bomb; Giant = vs a giant), read from the game's own win type; the match page names the ultimate and who did it, the share picture says "dramatic finish".</p></dd>
 <dt>DC</dt><dd><p>Next to the result: the fight ended without a KO / time up (someone quit or disconnected).</p><details class="gmore"><summary>More</summary><p>The result stays <b class="ru">?</b>; if the game still moved your ranked points, the Points column shows them and the match page says what the points imply (win / loss).</p></details></dd>
 <dt>Streak, form</dt><dd><p>On the opponent pages: every result oldest to newest (click a square for the match), the current streak (unknown results are skipped) and the last 5 / 10 form.</p></dd>
 </dl></section>
@@ -52,7 +52,7 @@
 <dt>Mode</dt><dd><p><span class="mode m1">Ranked</span>, <span class="mode">Quick</span> or <span class="mode">Player</span> (lobby) match; R / Q / P on a phone.</p></dd>
 <dt>Incidents</dt><dd><p>Incident log (on by default; <code>debug_incidents = 0</code> in <code>BT4RankedDetails.ini</code> turns it off): an online match that ended abnormally or saw a network error gets a red <span class="dc">!</span> and a line on the Incidents page (error code shown by the game, battle phase, time since the start / the KO, HP of both sides, ping, stalls, points before → after, the last 20 s).</p></dd>
 <dt>Characters</dt><dd><p>Your character(s) vs the opponent's (v1.2.0 on; hover for full names and DP).</p><details class="gmore"><summary>More</summary><p><b>Singles</b> / <b>DP</b> = the battle format; the Format filter applies to every list and to the totals.</p></details></dd>
-<dt>Timeline</dt><dd><p>With <code>timeline = 1</code> (the default): HP of both sides (in DP battles every character is its own line, a dashed line marks the switch), event markers, stall bands, the ping (a white line; dark in the light theme) with the game's grade bands and a 2 s min/max envelope, your input delay (blue) and theirs (dashed orange), and your FPS against the opponent's.</p></dd>
+<dt>Timeline</dt><dd><p>With <code>timeline = 1</code> (the default): HP of both sides (in Team battles every character is its own line, a dashed line marks the switch), event markers, stall bands, the ping (a white line; dark in the light theme) with the game's grade bands and a 2 s min/max envelope, your input delay (blue) and theirs (dashed orange), and your FPS against the opponent's.</p></dd>
 <dt>Timeline chips</dt><dd><p>Click to show or hide a line; remembered in this browser (every match uses the same choice).</p><details class="gmore"><summary>More</summary><p><b>▾ HP</b> / <b>▾ Latency</b> folds the whole chart; the axes fit what is shown.</p></details></dd>
 <dt>Pinned</dt><dd><p>The pin button on an opponent row (shown on hover) or on the opponent page keeps that opponent in the Pinned block at the top of Opponents (whatever the sort); pinned opponents get a small pin in the match list.</p><details class="gmore"><summary>More</summary><p>Pins are stored in this browser only (not in data.js), so another browser or a cleared browser storage starts without them.</p></details></dd>
 <dt>Pages</dt><dd><p>Lists with more than 100 rows (matches, the matches vs one opponent, many opponents or teams) are split into pages of 100; "Showing 101–200 of 1,234" counts the rows of the current filter.</p></dd>
@@ -66,7 +66,7 @@
 <li>Open <code>ranked_details\history\index.html</code> in your browser (double-click). It works straight from the file and loads nothing from the internet.</li>
 <li>The mod rewrites <code>data.js</code> at game start and after every real online match. The page reads it once when it opens: click <b>Reload</b> at the bottom of the page (or press F5) to see new matches; you stay on the same page.</li>
 <li>Long lists show 100 rows per page (‹ Prev 1 2 3 … Next ›); filters, search and sort always work over all matches. The page number is in the link, so reload and back / forward keep it.</li>
-<li><b>Matches</b>: filter by mode, format and opponent, click a column title to sort, click a row (or Open in the Full view column) to open the match page; the Steam column opens the opponent's Steam profile; ▾ in the Quick view column unfolds the match summary under its row (↑ / ↓ move it, Esc folds it); choose 10, 20 or 50 matches per page (remembered in this browser). A record of a fight that never happened (no result, a few seconds long) has a Delete button: it is hidden in this browser (Undo, or Restore all under the list); the data file keeps it. <b>Ended badly</b> lists the matches that ended abnormally. <b>Opponents</b>: one row per opponent (grouped by Account ID, so renamed players stay together); pick the order in <i>Sort by</i>; an opponent's page has the same tabs as a match. <b>Characters</b>: a card per character and DP team; click one for its matches. <b>You</b>: your ranked points over time, the win rate per week and your habits.</li>
+<li><b>Matches</b>: filter by mode, format and opponent, click a column title to sort, click a row (or Open in the Full view column) to open the match page; the Steam column opens the opponent's Steam profile; ▾ in the Quick view column unfolds the match summary under its row (↑ / ↓ move it, Esc folds it); choose 10, 20 or 50 matches per page (remembered in this browser). A record of a fight that never happened (no result, a few seconds long) has a Delete button: it is hidden in this browser (Undo, or Restore all under the list); the data file keeps it. <b>Ended badly</b> lists the matches that ended abnormally. <b>Opponents</b>: one row per opponent (grouped by ID de cuenta, so renamed players stay together); pick the order in <i>Sort by</i>; an opponent's page has the same tabs as a match. <b>Characters</b>: a card per character and Team team; click one for its matches. <b>You</b>: your ranked points over time, the win rate per week and your habits.</li>
 <li>Keyboard: <kbd>/</kbd> search an opponent, <kbd>←</kbd> / <kbd>→</kbd> older / newer match, <kbd>1</kbd>–<kbd>4</kbd> the match tabs, <kbd>Esc</kbd> back to the list, <kbd>?</kbd> all shortcuts. Every page has its own link (bookmark it, the browser's back button works).</li>
 <li>Put your exact in-game name in <code>data\my_name.txt</code> if the opponent is ever picked wrong.</li>
 <li>Timeline chips: click to show or hide a line; remembered in this browser (the same choice for every match; ▾ HP / ▾ Latency folds a whole chart).</li>
@@ -316,7 +316,7 @@ rush hits|golpes de rush
 lightning attacks|ataques relámpago
 clashes|choques
 other single strikes|otros golpes sueltos
-DP battle (team)|Batalla PD (equipo)
+Team battle|Batalla en equipo
 Singles (1 vs 1)|Individual (1 contra 1)
 {0} non-fight record(s) hidden (samples = 0)|{0} registro(s) sin combate ocultos (samples = 0)
 {0} malformed line(s) skipped|{0} línea(s) mal formadas omitidas
@@ -389,7 +389,7 @@ Current ranked win streak|Racha de victorias actual en ranked
 longest {0}|la más larga {0}
 streak|racha
 best {0}|mejor {0}
-BT4 Account|Cuenta BT4
+Cuenta BT4|Cuenta BT4
 Results, oldest to newest|Resultados, del más antiguo al más reciente
 Search opponent|Buscar rival
 avg only|solo media
@@ -434,9 +434,9 @@ Quick|Rápida
 Player|Jugador
 unconfirmed|sin confirmar
 win streak|racha de victorias
-DP|PD
+Team|Equipo
 Singles|Individual
-DP battles|Batallas PD
+Team battles|Batallas en equipo
 Today|Hoy
 Yesterday|Ayer
 Giant dramatic finish|Final dramático gigante
@@ -463,7 +463,7 @@ Time up|Tiempo agotado
 Give up|Rendición
 How to use it|Cómo se usa
 What every number means:|Qué significa cada dato:
-BT4 Ranked Details v{0} history page|Página de historial de BT4 Ranked Details v{0}
+BT4 Rankeds Details v{0} history page|Página de historial de BT4 Rankeds Details v{0}
 data generated|datos generados
 unknown writer|escritor desconocido
 built with Svelte (MIT) and ported d3 code (ISC), licenses in|hecho con Svelte (MIT) y código portado de d3 (ISC), licencias en
@@ -472,7 +472,7 @@ Win rate|% de victorias
 Show these matches|Ver estas partidas
 Team compositions|Composiciones de equipo
 order ignored|sin importar el orden
-Characters in your DP teams|Personajes en tus equipos PD
+Characters in your teams|Personajes en tus equipos
 Click a character or team for its matches.|Pulsa un personaje o un equipo para ver sus partidas.
 Search a term|Buscar un término
 What every number and badge on these pages means. Hover a ⓘ on the other pages for the short version.|Qué significa cada dato y cada etiqueta de estas páginas. Pasa el ratón sobre una ⓘ en las otras páginas para la versión corta.
@@ -547,7 +547,7 @@ win|victoria
 loss|derrota
 pts|puntos
 Screenshot|Captura
-DP time-out score at the end of the battle: HP % × DP over the fighters still standing (bench included). The higher total wins if the timer runs out|Puntuación PD por tiempo al final del combate: % de vida × PD de los luchadores que siguen en pie (banquillo incluido). Gana el total más alto si se acaba el tiempo
+Team time-out score at the end of the battle: HP % × Team over the fighters still standing (bench included). The higher total wins if the timer runs out|Puntuación por tiempo al final del combate: % de vida × de los luchadores que siguen en pie (banquillo incluido). Gana el total más alto si se acaba el tiempo
 level, decided by {0}|empate, decidido por {0}
 time-out score|puntuación por tiempo
 level|empate
@@ -791,9 +791,9 @@ matches since 1.8.1 only|solo partidas desde la 1.8.1
 No combat counters in this record.|Este registro no tiene contadores de combate.
 on the field at the end|en el campo al final
 show my matches with this character|ver mis partidas con este personaje
-DP battle|Batalla PD
-limit {0} DP|límite {0} PD
-{0} vs {1} DP|{0} vs {1} PD
+Team battle|Batalla en equipo
+limit {0} DP|límite {0}
+{0} vs {1} DP|{0} vs {1}
 Micro-wait (1 frame)|Microespera (1 fotograma)
 Micro-wait (1–{0} frames)|Microespera (1–{0} fotogramas)
 Micro-wait (&lt; 0.1 s)|Microespera (&lt; 0.1 s)
@@ -918,8 +918,8 @@ Vanished (teleport)|Evitadas con vanish (teletransporte)
 Guarded|Bloqueadas
 Countered|Contraatacadas
 Resources|Recursos
-Max Power activations|Activaciones de Sparking!
-Time in Max Power|Tiempo en Sparking!
+Max Power activations|Activaciones de Max Power
+Time in Max Power|Tiempo en Max Power
 Transformations|Transformaciones
 Character switches|Cambios de personaje
 Skill count spent|Contador de habilidad gastado
@@ -1026,12 +1026,12 @@ Quick view|Vista rápida
 Opponent page|Ver rival
 click a row to open the match · ▣ quick view beside the list · click a column title to sort|haz clic en una fila para abrir la partida · ▣ vista rápida al lado de la lista · haz clic en el título de una columna para ordenar
 click a row to open the match · click a column title to sort|haz clic en una fila para abrir la partida · haz clic en el título de una columna para ordenar
-No Account ID recorded|Sin Account ID registrado
+No ID de cuenta recorded|Sin ID de cuenta registrado
 Streak {0}|Racha {0}
 Finish|Final
 Hide the quick view|Ocultar la vista rápida
 Show the quick view under this row|Mostrar la vista rápida debajo de esta fila
-The opponent's BT4 Account|El perfil de Steam del rival (se abre en el navegador)
+The opponent's Cuenta BT4|El perfil de Steam del rival (se abre en el navegador)
 The summary unfolds under the row|El resumen se despliega debajo de la fila
 Full view|Vista completa
 The match page with every tab|La página de la partida con todas sus pestañas
@@ -1068,9 +1068,9 @@ Restore all|Restaurar todos
 <dt>V/D</dt><dd><p>Resultado desde tu lado: <b class="rw">V</b> victoria, <b class="rl">D</b> derrota, <b class="rd">E</b> empate, <b class="ru">?</b> desconocido (la partida terminó sin que se viera un KO, p. ej. por una desconexión, o se registró antes de la v1.1.0).</p><details class="gmore"><summary>Más</summary><p>El porcentaje de victorias solo cuenta victorias y derrotas; pasa el ratón por un resultado para ver cómo terminó la partida.</p></details></dd>
 <dt>H2H</dt><dd><p>Tu historial cara a cara contra ese rival tras esa partida (V-D, o V-D-E con empates), mostrado a partir del segundo enfrentamiento.</p><details class="gmore"><summary>Más</summary><p>Se cuenta sobre todas las partidas, sea cual sea el filtro.</p></details></dd>
 <dt>Puntos</dt><dd><p>Puntos de Ranked ganados (<b class="rw">+N</b>) o perdidos (<b class="rl">-N</b>) en esa partida, desde la v1.7.0 (partidas antiguas y partidas en las que no se vio ningún cambio: –).</p><details class="gmore"><summary>Más</summary><p>"(sin confirmar)" = registrado antes de comprobar el origen del valor con el número que mostraba el juego.</p><details class="tech"><summary>Detalles técnicos</summary><p>El mod lee los propios valores de rango del juego antes de la partida y después del resultado (solo lectura, <code>rank_lookup = 1</code>); pasa el ratón para ver el rango y los puntos antes → después.</p></details></details></dd>
-<dt>Rango</dt><dd><p>Cabecera de la página de partidas: tus puntos totales y tu rango actuales en Individual (Singles) y PD (el nombre de rango del juego, p. ej. <i>Individual 30,326 · Z</i>), más tu racha de victorias actual en Ranked y la más larga (mejor), leídas tras tu partida registrada más reciente; – hasta que una partida lo haya registrado.</p><details class="gmore"><summary>Más</summary><p>La página de la partida muestra los puntos de esa partida bajo el resultado (al pasar el ratón: rango y puntos antes → después y la racha de victorias antes → después).</p></details></dd>
+<dt>Rango</dt><dd><p>Cabecera de la página de partidas: tus puntos totales y tu rango actuales en Individual (Singles) y (el nombre de rango del juego, p. ej. <i>Individual 30,326 · Z</i>), más tu racha de victorias actual en Ranked y la más larga (mejor), leídas tras tu partida registrada más reciente; – hasta que una partida lo haya registrado.</p><details class="gmore"><summary>Más</summary><p>La página de la partida muestra los puntos de esa partida bajo el resultado (al pasar el ratón: rango y puntos antes → después y la racha de victorias antes → después).</p></details></dd>
 <dt>Racha de victorias</dt><dd><p>La tuya: de las propias estadísticas de Ranked del juego (cabecera, y antes → después en la página de la partida).</p><details class="gmore"><summary>Más</summary><details class="tech"><summary>Detalles técnicos</summary><p>La del rival (<span class="osk">87V</span> junto a su nombre, "su racha de victorias" en la página de la partida, una ficha en la página del rival): leída de la tarjeta de jugador del juego antes del combate (v1.8.0, aún en verificación: el mod lee los textos de información del jugador de la pantalla de enfrentamiento / resultado).</p></details></details></dd>
-<dt>Final especial</dt><dd><p><span class="fin">★</span> junto al resultado: la partida (o una ronda de PD) terminó con un <b>final dramático</b> de un ultimate (p. ej. Evil Containment Wave de Master Roshi, Angry Kamehameha de Goku, Dragon Fist, Spirit Bomb; Gigante = contra un gigante), leído del propio tipo de victoria del juego; la página de la partida nombra el ultimate y quién lo hizo, y la imagen para compartir dice "final dramático".</p></dd>
+<dt>Final especial</dt><dd><p><span class="fin">★</span> junto al resultado: la partida (o una ronda de) terminó con un <b>final dramático</b> de un ultimate (p. ej. Evil Containment Wave de Master Roshi, Angry Kamehameha de Goku, Dragon Fist, Spirit Bomb; Gigante = contra un gigante), leído del propio tipo de victoria del juego; la página de la partida nombra el ultimate y quién lo hizo, y la imagen para compartir dice "final dramático".</p></dd>
 <dt>DC</dt><dd><p>Junto al resultado: el combate terminó sin KO / tiempo agotado (alguien abandonó o se desconectó).</p><details class="gmore"><summary>Más</summary><p>El resultado se queda en <b class="ru">?</b>; si el juego aun así movió tus puntos de Ranked, la columna Puntos los muestra y la página de la partida dice qué implican esos puntos (victoria / derrota).</p></details></dd>
 <dt>Racha, forma</dt><dd><p>En las páginas de rivales: cada resultado del más antiguo al más reciente (haz clic en un cuadro para ir a la partida), la racha actual (los resultados desconocidos se omiten) y la forma en las últimas 5 / 10.</p></dd>
 </dl></section>
@@ -1089,8 +1089,8 @@ Restore all|Restaurar todos
 <dl class="legend">
 <dt>Modo</dt><dd><p>Partida <span class="mode m1">Ranked</span>, <span class="mode">Rápida</span> o <span class="mode">Jugador</span> (sala); R / Rá / J en el móvil.</p></dd>
 <dt>Incidencias</dt><dd><p>Registro de incidencias (activo por defecto; <code>debug_incidents = 0</code> en <code>BT4RankedDetails.ini</code> lo desactiva): una partida online que terminó de forma anómala o tuvo un error de red recibe un <span class="dc">!</span> rojo y una línea en la página de Incidencias (código de error mostrado por el juego, fase del combate, tiempo desde el inicio / el KO, vida de ambos lados, ping, parones, puntos antes → después, los últimos 20 s).</p></dd>
-<dt>Personajes</dt><dd><p>Tu(s) personaje(s) contra los del rival (desde la v1.2.0; pasa el ratón para ver los nombres completos y PD).</p><details class="gmore"><summary>Más</summary><p><b>Individual</b> / <b>PD</b> = el formato de combate; el filtro Formato se aplica a todas las listas y a los totales.</p></details></dd>
-<dt>Línea de tiempo</dt><dd><p>Con <code>timeline = 1</code> (por defecto): vida de ambos lados (en batallas PD cada personaje es su propia línea; una línea discontinua marca el cambio), marcadores de eventos, bandas de parón, el ping (una línea blanca; oscura en el tema claro) con las bandas de calidad del juego y una envolvente mín/máx de 2 s, tu retraso de entrada (azul) y el suyo (naranja discontinuo), y tus FPS frente a los del rival.</p></dd>
+<dt>Personajes</dt><dd><p>Tu(s) personaje(s) contra los del rival (desde la v1.2.0; pasa el ratón para ver los nombres completos y).</p><details class="gmore"><summary>Más</summary><p><b>Individual</b> / <b>PD</b> = el formato de combate; el filtro Formato se aplica a todas las listas y a los totales.</p></details></dd>
+<dt>Línea de tiempo</dt><dd><p>Con <code>timeline = 1</code> (por defecto): vida de ambos lados (en batallas cada personaje es su propia línea; una línea discontinua marca el cambio), marcadores de eventos, bandas de parón, el ping (una línea blanca; oscura en el tema claro) con las bandas de calidad del juego y una envolvente mín/máx de 2 s, tu retraso de entrada (azul) y el suyo (naranja discontinuo), y tus FPS frente a los del rival.</p></dd>
 <dt>Botones de la línea de tiempo</dt><dd><p>Haz clic para mostrar u ocultar una línea; se recuerda en este navegador (todas las partidas usan la misma elección).</p><details class="gmore"><summary>Más</summary><p><b>▾ Vida</b> / <b>▾ Latencia</b> pliega el gráfico entero; los ejes se ajustan a lo que se muestra.</p></details></dd>
 <dt>Fijado</dt><dd><p>El botón de fijar de la fila de un rival (aparece al pasar el ratón) o de su página mantiene a ese rival en el bloque Fijados, arriba del todo en Rivales (sea cual sea el orden); los rivales fijados llevan una pequeña chincheta en la lista de partidas.</p><details class="gmore"><summary>Más</summary><p>Los fijados se guardan solo en este navegador (no en data.js), así que otro navegador o un almacenamiento del navegador borrado empieza sin ellos.</p></details></dd>
 <dt>Páginas</dt><dd><p>Las listas con más de 100 filas (partidas, las partidas contra un rival, muchos rivales o equipos) se dividen en páginas de 100; "Mostrando 101–200 de 1,234" cuenta las filas del filtro actual.</p></dd>
@@ -1103,7 +1103,7 @@ Restore all|Restaurar todos
 <li>Abre <code>ranked_details\history\index.html</code> en tu navegador (doble clic). Funciona directamente desde el archivo y no carga nada de internet.</li>
 <li>El mod reescribe <code>data.js</code> al iniciar el juego y después de cada partida online real. La página lo lee una vez al abrirse: haz clic en <b>Recargar</b> al pie de la página (o pulsa F5) para ver las partidas nuevas; te quedas en la misma página.</li>
 <li>Las listas largas muestran 100 filas por página (‹ Anterior 1 2 3 … Siguiente ›); los filtros, la búsqueda y el orden siempre se aplican a todas las partidas. El número de página va en el enlace, así que recargar y atrás / adelante lo conservan.</li>
-<li><b>Partidas</b>: filtra por modo, formato y rival, haz clic en el título de una columna para ordenar y en una fila (o en Abrir, en la columna Vista completa) para abrir la página de la partida; la columna Steam abre el perfil de Steam del rival; ▾ en la columna Vista rápida despliega el resumen de la partida debajo de su fila (↑ / ↓ la mueven, Esc la pliega); elige 10, 20 o 50 partidas por página (se recuerda en este navegador). Un registro de una pelea que nunca existió (sin resultado, de pocos segundos) tiene un botón Borrar: se oculta en este navegador (Deshacer, o Restaurar todos debajo de la lista); el archivo de datos lo conserva. <b>Terminadas mal</b> reúne las partidas que acabaron de forma anómala. <b>Rivales</b>: una fila por rival (agrupados por Account ID, así que los jugadores que cambian de nombre siguen juntos); elige el orden en <i>Ordenar por</i>; la página de un rival tiene pestañas como una partida. <b>Personajes</b>: una tarjeta por personaje y equipo PD; haz clic en una para ver sus partidas. <b>Tú</b>: tus puntos de ranked en el tiempo, el % de victorias por semana y tus costumbres.</li>
+<li><b>Partidas</b>: filtra por modo, formato y rival, haz clic en el título de una columna para ordenar y en una fila (o en Abrir, en la columna Vista completa) para abrir la página de la partida; la columna Steam abre el perfil de Steam del rival; ▾ en la columna Vista rápida despliega el resumen de la partida debajo de su fila (↑ / ↓ la mueven, Esc la pliega); elige 10, 20 o 50 partidas por página (se recuerda en este navegador). Un registro de una pelea que nunca existió (sin resultado, de pocos segundos) tiene un botón Borrar: se oculta en este navegador (Deshacer, o Restaurar todos debajo de la lista); el archivo de datos lo conserva. <b>Terminadas mal</b> reúne las partidas que acabaron de forma anómala. <b>Rivales</b>: una fila por rival (agrupados por ID de cuenta, así que los jugadores que cambian de nombre siguen juntos); elige el orden en <i>Ordenar por</i>; la página de un rival tiene pestañas como una partida. <b>Personajes</b>: una tarjeta por personaje y equipo; haz clic en una para ver sus partidas. <b>Tú</b>: tus puntos de ranked en el tiempo, el % de victorias por semana y tus costumbres.</li>
 <li>Teclado: <kbd>/</kbd> busca un rival, <kbd>←</kbd> / <kbd>→</kbd> partida anterior / siguiente, <kbd>1</kbd>–<kbd>4</kbd> las pestañas de la partida, <kbd>Esc</kbd> vuelve a la lista, <kbd>?</kbd> todos los atajos. Cada página tiene su propio enlace (guárdalo en marcadores; el botón atrás del navegador funciona).</li>
 <li>Pon tu nombre exacto del juego en <code>data\my_name.txt</code> si alguna vez se elige mal al rival.</li>
 <li>Botones de la línea de tiempo: haz clic para mostrar u ocultar una línea; se recuerda en este navegador (la misma elección para todas las partidas; ▾ Vida / ▾ Latencia pliega un gráfico entero).</li>

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build data.js for the BT4 Ranked Details match-history viewer (manual rebuild).
+"""Build data.js for the BT4 Rankeds Details match-history viewer (manual rebuild).
 
 The mod rewrites data.js itself after every real online match and once at game start, so this script is optional.
 It lives in  ranked_details\history\  and reads the mod's records from  ranked_details\data\ :

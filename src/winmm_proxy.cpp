@@ -177,7 +177,7 @@ static unsigned __stdcall worker_main(void*) {
     bt4rd::write_default_ini(g_engine.ini_path());
     bt4rd::load_config_if_changed(g_engine.ini_path(), g_cfg, true);
 
-    g_engine.log_line("BT4RankedDetails v1.0.0 starting (proxy winmm.dll)");
+    g_engine.log_line("BT4 Rankeds Details v1.1.0 starting (proxy winmm.dll)");
 
     if (g_cfg.aob_scan) {
         bt4rd::resolve_bt4_bindings(g_bind);
@@ -193,28 +193,40 @@ static unsigned __stdcall worker_main(void*) {
 
     g_overlay.start(&g_engine, &g_cfg);
 
-    int cfg_ticks = 0;
+    int tick_50ms = 0;
     while (!g_stop.load()) {
-        if (++cfg_ticks >= 4) {
-            cfg_ticks = 0;
+        // Every ~1 s: hot-reload INI
+        if (tick_50ms % 20 == 0) {
             if (bt4rd::load_config_if_changed(g_engine.ini_path(), g_cfg, false)) {
                 g_engine.log_line("BT4RankedDetails.ini reloaded");
             }
         }
 
-        bt4rd::Bt4NetMeterStats net{};
-        bool relay = false, online = false;
-        int side = 0;
-        float fps = 0.0f, speed = 100.0f;
-        bool has_net = bt4rd::safe_read_net_stats(g_bind, net, relay, online, side, fps, speed);
+        static int last_side = 0;
+        // Every 250 ms (4 Hz): network stats & session lifecycle
+        if (tick_50ms % 5 == 0) {
+            bt4rd::Bt4NetMeterStats net{};
+            bool relay = false, online = false;
+            int side = 0;
+            float fps = 0.0f, speed = 100.0f;
+            bool has_net = bt4rd::safe_read_net_stats(g_bind, net, relay, online, side, fps, speed);
+            last_side = side;
+            g_engine.tick(g_cfg, has_net, net, relay, online, side, fps, speed);
+        }
 
-        g_engine.tick(g_cfg, has_net, net, relay, online, side, fps, speed);
-        Sleep(250);
+        // Every 50 ms (20 Hz): direct C++ player names & fighter/combat/HP tracker
+        bt4rd::Bt4BattleSnap bsnap{};
+        if (bt4rd::safe_read_battle_and_names(g_bind, bsnap)) {
+            g_engine.tick_battle_direct(bsnap, last_side);
+        }
+
+        ++tick_50ms;
+        Sleep(50);
     }
 
     g_overlay.stop();
     g_engine.shutdown(g_cfg);
-    g_engine.log_line("BT4RankedDetails stopped cleanly");
+    g_engine.log_line("BT4 Rankeds Details stopped cleanly");
     return 0;
 }
 

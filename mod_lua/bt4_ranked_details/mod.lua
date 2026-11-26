@@ -114,10 +114,10 @@ local function draw_timeout_bar(hud, game, me, opp)
 end
 
 return {
-    name = "BT4 Ranked Details",
-    version = "1.0.0",
-    author = "BT4RankedDetails",
-    description = "Time-Out tug-of-war bar and read-only combat telemetry bridge for BT4 Ranked Details.",
+    name = "BT4 Rankeds Details",
+    version = "1.1.0",
+    author = "BT4RankedsDetails",
+    description = "Time-Out tug-of-war bar for Team Battle in BT4 Rankeds Details.",
     settings = {
         { id = "timeout_bar", label = "Time-Out bar (Team Battle)", type = "toggle", default = true,
           tip = "Shows who would win if time ran out right now under the timer." },

@@ -46,8 +46,6 @@ struct FighterEntry {
     int chara = -1;
     std::string id;
     std::string name;
-    int hp = 0;
-    int hp_max = 0;
 };
 
 struct CombatSide {
@@ -67,6 +65,20 @@ struct CombatSide {
     int boosts = 0;
     int blast_spent = 0;
     double charge_s = 0.0;
+    int hits_total = 0;
+};
+
+struct DirectFighterTracker {
+    int last_hp = -1;
+    int last_chara = -1;
+    int last_active = -1;
+    int last_blast = -1;
+    bool was_sparking = false;
+    int last_hit_seq = -1;
+    int last_combo_hits = 0;
+    int last_combo_dmg = 0;
+    int last_msg_seq = -1;
+    int64_t switch_grace_until_ms = 0;
 };
 
 inline std::string json_escape(const std::string& s) {
@@ -94,13 +106,8 @@ inline std::string json_escape(const std::string& s) {
     return o;
 }
 
-inline std::string json_str(const std::string& s) {
-    return "\"" + json_escape(s) + "\"";
-}
-
-inline std::string json_str_or_null(const std::string& s) {
-    return s.empty() ? "null" : json_str(s);
-}
+inline std::string json_str(const std::string& s) { return "\"" + json_escape(s) + "\""; }
+inline std::string json_str_or_null(const std::string& s) { return s.empty() ? "null" : json_str(s); }
 
 inline std::string now_local_iso(bool filename_safe = false) {
     SYSTEMTIME st{};
@@ -158,7 +165,6 @@ inline bool append_file_line(const std::wstring& path, const std::string& line) 
     return ok && written == data.size();
 }
 
-// Minimal JSON field extractors (zero external JSON library dependency)
 inline bool json_extract_string(const std::string& j, const std::string& key, std::string& out) {
     std::string pat = "\"" + key + "\"";
     size_t p = j.find(pat);
@@ -219,13 +225,11 @@ public:
         append_file_line(log_path(), "[" + now_local_iso() + "] " + msg);
     }
 
-    // Called from WinHTTP IAT observer when bt4_ranked_api or matchmaking responds
     void on_http_event(const HttpObservedEvent& ev) {
         std::lock_guard<std::mutex> lk(mu_);
         const std::string& req = ev.request_body;
         const std::string& res = ev.response_body;
 
-        // Detect ranked_status (before / after points)
         if (req.find("ranked_status") != std::string::npos || res.find("\"rating\"") != std::string::npos) {
             int r = 0, st = 0;
             if (json_extract_int(res, "rating", r)) {
@@ -239,7 +243,6 @@ public:
             }
         }
 
-        // Detect ranked_report / ranked_forfeit
         if (req.find("ranked_report") != std::string::npos || req.find("ranked_forfeit") != std::string::npos) {
             session_.mode = 1;
             session_.mode_name = "ranking";
@@ -268,7 +271,6 @@ public:
             }
         }
 
-        // Extract rival metadata if present in matchmaking / room responses
         std::string opp, oid, reg, rset;
         if (json_extract_string(res, "opponent_name", opp) || json_extract_string(res, "rival", opp) || json_extract_string(res, "nickname", opp)) {
             if (!opp.empty() && opp != self_name_) session_.opponent = opp;
@@ -280,19 +282,179 @@ public:
             session_.region = reg;
         }
         if (json_extract_string(req, "ruleset", rset) || json_extract_string(res, "ruleset", rset)) {
-            if (rset == "team" || rset == "teams") session_.format = "dp";
+            if (rset == "team" || rset == "teams") session_.format = "team";
             else if (rset == "solo") session_.format = "singles";
         }
     }
 
-    // Called every 250 ms from worker thread
+    // Direct C++ battle & player-name tick (called at ~10-20 Hz, no Lua mod required!)
+    void tick_battle_direct(const Bt4BattleSnap& snap, int local_side) {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (!session_.active) return;
+
+        int me = (local_side == 1) ? 1 : 0;
+        int opp = 1 - me;
+
+        // 1. Player names directly from bt3_net_player_name(0/1)
+        if (!snap.player_names[me].empty() && snap.player_names[me] != "Player 1" && snap.player_names[me] != "Player 2") {
+            self_name_ = snap.player_names[me];
+        }
+        if (!snap.player_names[opp].empty() && snap.player_names[opp] != self_name_ &&
+            snap.player_names[opp] != "Player 1" && snap.player_names[opp] != "Player 2") {
+            if (session_.opponent != snap.player_names[opp]) {
+                session_.opponent = snap.player_names[opp];
+                log_line("opponent detected via bt3_net_player_name: " + session_.opponent);
+            }
+        }
+
+        int64_t t_ms = now_mono_ms();
+        int rel_ms = (int)(t_ms - session_.start_mono_ms);
+        double dt = (session_.last_battle_tick_ms > 0) ? std::min(0.25, (t_ms - session_.last_battle_tick_ms) / 1000.0) : 0.0;
+        session_.last_battle_tick_ms = t_ms;
+
+        // Detect battle start / end transitions
+        if (snap.in_battle && !session_.saw_battle) {
+            session_.saw_battle = true;
+            session_.direct_trk[0] = DirectFighterTracker{};
+            session_.direct_trk[1] = DirectFighterTracker{};
+            session_.last_hp_sample_ms = 0;
+        } else if (!snap.in_battle && session_.saw_battle) {
+            // Battle just ended -> finalize pending combos & infer result if not already set
+            for (int s = 0; s < 2; ++s) {
+                auto& tr = session_.direct_trk[s];
+                CombatSide& cs = (s == me) ? session_.combat_me : session_.combat_opp;
+                if (tr.last_combo_hits >= 2) {
+                    ++cs.combo_n;
+                    cs.combo_sum += tr.last_combo_hits;
+                    if (tr.last_combo_hits > cs.combo_max) cs.combo_max = tr.last_combo_hits;
+                    if (tr.last_combo_dmg > cs.combo_max_dmg) cs.combo_max_dmg = tr.last_combo_dmg;
+                    tr.last_combo_hits = 0;
+                    tr.last_combo_dmg = 0;
+                }
+            }
+            if (session_.result == "unknown") {
+                int mhp = session_.direct_trk[me].last_hp;
+                int ohp = session_.direct_trk[opp].last_hp;
+                if (mhp > 0 && ohp == 0) { session_.result = "win"; session_.end_type = "KnockOut"; }
+                else if (ohp > 0 && mhp == 0) { session_.result = "loss"; session_.end_type = "KnockOut"; }
+                else if (mhp == 0 && ohp == 0) { session_.result = "draw"; session_.end_type = "DoubleKnockOut"; }
+                else if (mhp > ohp) { session_.result = "win"; session_.end_type = "TimeUp"; }
+                else if (ohp > mhp) { session_.result = "loss"; session_.end_type = "TimeUp"; }
+            }
+            session_.saw_battle = false;
+            return;
+        }
+
+        if (!snap.in_battle) return;
+
+        // Capture team rosters (up to 5 members per side)
+        auto sync_team = [&](int s, std::vector<FighterEntry>& dst) {
+            const auto& f = snap.sides[s];
+            int lim = (f.count > 0 && f.count <= 5) ? f.count : 1;
+            for (int m = 0; m < lim; ++m) {
+                int cid = f.member_charas[m];
+                if (cid < 0) continue;
+                bool exists = false;
+                for (auto& e : dst) if (e.chara == cid) { exists = true; break; }
+                if (!exists) dst.push_back({cid, char_id_str(cid), char_name_str(cid)});
+            }
+            if (dst.size() > 1) session_.format = "team";
+        };
+        sync_team(me, session_.my_team);
+        sync_team(opp, session_.opp_team);
+
+        // Per-side combat tracking
+        for (int s = 0; s < 2; ++s) {
+            const auto& f = snap.sides[s];
+            auto& tr = session_.direct_trk[s];
+            CombatSide& cs = (s == me) ? session_.combat_me : session_.combat_opp;
+            CombatSide& other_cs = (s == me) ? session_.combat_opp : session_.combat_me;
+            const char* tag = (s == me) ? "me" : "opp";
+
+            if (tr.last_active >= 0 && f.active != tr.last_active) {
+                tr.switch_grace_until_ms = t_ms + 2000;
+                ++cs.switches;
+                session_.tl_ev.push_back({rel_ms, tag, "switch", char_name_str(f.chara)});
+            } else if (tr.last_chara >= 0 && f.chara >= 0 && f.chara != tr.last_chara) {
+                tr.switch_grace_until_ms = t_ms + 2000;
+            }
+
+            if (tr.last_hp >= 0 && t_ms > tr.switch_grace_until_ms && f.hp_max > 0) {
+                int d = f.hp - tr.last_hp;
+                if (d < 0 && -d < 80000) {
+                    other_cs.dmg += (-d);
+                    cs.taken += (-d);
+                    ++other_cs.hits_total;
+                } else if (d > 0 && d < 15000) {
+                    cs.healed += d;
+                    ++cs.heal_n;
+                }
+            }
+            tr.last_hp = f.hp;
+            tr.last_chara = f.chara;
+            tr.last_active = f.active;
+
+            if (tr.last_blast >= 0 && f.blast < tr.last_blast) {
+                int spent = (tr.last_blast - f.blast + 50000) / 100000;
+                if (spent > 0 && spent <= 5) cs.blast_spent += spent;
+            }
+            tr.last_blast = f.blast;
+
+            if (f.powered_up) {
+                cs.sparking_s += dt;
+                if (!tr.was_sparking) {
+                    ++cs.sparking;
+                    session_.tl_ev.push_back({rel_ms, tag, "sparking", "Max Power"});
+                }
+            }
+            tr.was_sparking = f.powered_up;
+
+            // Combos
+            if (tr.last_hit_seq >= 0 && f.hit_seq != tr.last_hit_seq) {
+                if (tr.last_combo_hits >= 2 && f.hud_hits < tr.last_combo_hits) {
+                    ++cs.combo_n;
+                    cs.combo_sum += tr.last_combo_hits;
+                    if (tr.last_combo_hits > cs.combo_max) cs.combo_max = tr.last_combo_hits;
+                    if (tr.last_combo_dmg > cs.combo_max_dmg) cs.combo_max_dmg = tr.last_combo_dmg;
+                }
+                tr.last_combo_hits = f.hud_hits;
+                tr.last_combo_dmg = std::max(0, f.hud_damage);
+            }
+            tr.last_hit_seq = f.hit_seq;
+
+            // Messages: 0=Counter, 1=MAX POWER, 3=First Attack, 4=BOOST
+            if (tr.last_msg_seq >= 0 && f.message_seq != tr.last_msg_seq) {
+                if (f.message == 0) {
+                    ++cs.counters;
+                    session_.tl_ev.push_back({rel_ms, tag, "super_counter", "Counter!"});
+                } else if (f.message == 3) {
+                    ++cs.first_attack;
+                    session_.tl_ev.push_back({rel_ms, tag, "first_attack", "First Attack!"});
+                } else if (f.message == 4) {
+                    ++cs.boosts;
+                }
+            }
+            tr.last_msg_seq = f.message_seq;
+        }
+
+        // Active characters & HP timeline sample (every 400 ms)
+        if (snap.sides[me].chara >= 0) session_.active_me_id = char_id_str(snap.sides[me].chara);
+        if (snap.sides[opp].chara >= 0) session_.active_opp_id = char_id_str(snap.sides[opp].chara);
+
+        if (t_ms - session_.last_hp_sample_ms >= 400) {
+            session_.last_hp_sample_ms = t_ms;
+            session_.tl_hp_me.push_back({rel_ms, std::max(0, snap.sides[me].hp), session_.active_me_id});
+            session_.tl_hp_opp.push_back({rel_ms, std::max(0, snap.sides[opp].hp), session_.active_opp_id});
+        }
+    }
+
+    // Network tick (called every 250 ms)
     void tick(const Config& cfg, bool has_net, const Bt4NetMeterStats& net, bool is_relay, bool is_online, int local_side, float fps, float speed_pct) {
         std::lock_guard<std::mutex> lk(mu_);
         int64_t t_ms = now_mono_ms();
 
         poll_bt3_log(t_ms);
 
-        // Session lifecycle transitions
         if (has_net && is_online) {
             if (!session_.active) {
                 start_session(t_ms, local_side, is_relay, speed_pct);
@@ -301,13 +463,11 @@ public:
             inactive_ticks_ = 0;
         } else if (session_.active) {
             ++inactive_ticks_;
-            // Close session after 2.0 s (8 ticks) of no active net session
             if (inactive_ticks_ >= 8) {
                 end_session(cfg, "session_ended");
             }
         }
 
-        // Update live snapshot for overlay
         live_.in_session = session_.active;
         live_.online = is_online;
         live_.relay = is_relay;
@@ -330,7 +490,6 @@ public:
         live_.region = session_.region;
         live_.mode_name = session_.mode_name;
 
-        // Write state.json every ~1 s
         if (t_ms - last_state_write_ms_ >= 1000) {
             last_state_write_ms_ = t_ms;
             write_state_json();
@@ -349,7 +508,6 @@ public:
         return live_;
     }
 
-    // Exposed for unit tests / offline verification
     void force_rebuild_history() {
         std::lock_guard<std::mutex> lk(mu_);
         rebuild_history_js();
@@ -358,12 +516,15 @@ public:
 private:
     struct Session {
         bool active = false;
+        bool saw_battle = false;
         std::string match_id;
         std::string start_local;
         double start_unix = 0.0;
         int64_t start_mono_ms = 0;
+        int64_t last_battle_tick_ms = 0;
+        int64_t last_hp_sample_ms = 0;
 
-        int mode = 2; // 1=Ranked, 2=Quick, 4=Lobby/Player
+        int mode = 2;
         std::string mode_name = "quick";
         std::string format = "singles";
         int my_side = 0;
@@ -411,8 +572,8 @@ private:
         std::string active_opp_id;
         CombatSide combat_me;
         CombatSide combat_opp;
+        DirectFighterTracker direct_trk[2];
 
-        // Timeline buffers
         std::vector<std::pair<int, int>> tl_rtt;
         std::vector<std::pair<int, int>> tl_delay;
         std::vector<std::pair<int, double>> tl_rb;
@@ -431,14 +592,12 @@ private:
 
     Session session_;
     LiveSnapshot live_;
-    std::deque<std::pair<int64_t, int>> recent_rtt_; // last 10 s for jitter
+    std::deque<std::pair<int64_t, int>> recent_rtt_;
     int inactive_ticks_ = 0;
     int64_t last_state_write_ms_ = 0;
     int match_counter_ = 0;
     int last_known_rating_ = -1;
     int last_known_streak_ = 0;
-
-    // bt3_log.txt tailing state
     uint64_t bt3_log_offset_ = 0;
     bool bt3_log_inited_ = false;
 
@@ -582,7 +741,6 @@ private:
         return std::sqrt(v / recent_rtt_.size());
     }
 
-    // Tails bt3_log.txt for native BT4 net lines + BT4RD| lines emitted by mod_lua
     void poll_bt3_log(int64_t t_ms) {
         std::wstring p = game_dir_ + L"\\bt3_log.txt";
         HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -592,12 +750,12 @@ private:
         if (!GetFileSizeEx(h, &sz)) { CloseHandle(h); return; }
         uint64_t file_sz = (uint64_t)sz.QuadPart;
         if (!bt3_log_inited_) {
-            bt3_log_offset_ = file_sz; // start tailing from current end
+            bt3_log_offset_ = file_sz;
             bt3_log_inited_ = true;
             CloseHandle(h);
             return;
         }
-        if (file_sz < bt3_log_offset_) bt3_log_offset_ = 0; // log rotated
+        if (file_sz < bt3_log_offset_) bt3_log_offset_ = 0;
         if (file_sz == bt3_log_offset_) { CloseHandle(h); return; }
 
         uint64_t to_read = std::min<uint64_t>(file_sz - bt3_log_offset_, 131072);
@@ -619,11 +777,8 @@ private:
         CloseHandle(h);
     }
 
-    void parse_bt3_log_line(const std::string& line, int64_t t_ms) {
+    void parse_bt3_log_line(const std::string& line, int64_t) {
         if (!session_.active) return;
-        int rel_ms = (int)(t_ms - session_.start_mono_ms);
-
-        // Native BT4decomp log lines
         if (line.find("connected through the relay") != std::string::npos) {
             session_.relay = true;
         } else if (line.find("The other player's game was closed") != std::string::npos) {
@@ -632,85 +787,12 @@ private:
             session_.incident_detail = "opponent closed the game";
             session_.end_type = "Disconnect";
         } else if (line.find("rules: team battle") != std::string::npos) {
-            session_.format = "dp";
+            session_.format = "team";
         } else if (line.find("rules: single battle") != std::string::npos) {
             session_.format = "singles";
         } else if (line.find("joining the lobby") != std::string::npos || line.find("bt3: lobby:") != std::string::npos) {
             session_.mode = 4;
             session_.mode_name = "player";
-        }
-
-        // Structured Lua mod lines: "... BT4RD|<KIND>|<fields>"
-        size_t pos = line.find("BT4RD|");
-        if (pos == std::string::npos) return;
-        std::string payload = line.substr(pos + 6);
-        std::vector<std::string> f;
-        size_t s = 0;
-        while (true) {
-            size_t bar = payload.find('|', s);
-            if (bar == std::string::npos) { f.push_back(payload.substr(s)); break; }
-            f.push_back(payload.substr(s, bar - s));
-            s = bar + 1;
-        }
-        if (f.empty()) return;
-
-        if (f[0] == "TEAM" && f.size() >= 4) {
-            // BT4RD|TEAM|me|chara1,chara2,...|opp_c1,opp_c2,...
-            auto parse_team = [&](const std::string& csv, std::vector<FighterEntry>& dst) {
-                dst.clear();
-                std::istringstream ss(csv);
-                std::string tok;
-                while (std::getline(ss, tok, ',')) {
-                    if (tok.empty()) continue;
-                    int cid = std::atoi(tok.c_str());
-                    dst.push_back({cid, char_id_str(cid), char_name_str(cid), 0, 0});
-                }
-            };
-            parse_team(f[2], session_.my_team);
-            parse_team(f[3], session_.opp_team);
-            if (session_.my_team.size() > 1 || session_.opp_team.size() > 1) session_.format = "dp";
-        } else if (f[0] == "HP" && f.size() >= 5) {
-            // BT4RD|HP|me_hp|opp_hp|me_chara|opp_chara
-            int mhp = std::atoi(f[1].c_str()), ohp = std::atoi(f[2].c_str());
-            std::string mc = char_id_str(std::atoi(f[3].c_str()));
-            std::string oc = char_id_str(std::atoi(f[4].c_str()));
-            session_.active_me_id = mc;
-            session_.active_opp_id = oc;
-            session_.tl_hp_me.push_back({rel_ms, mhp, mc});
-            session_.tl_hp_opp.push_back({rel_ms, ohp, oc});
-        } else if (f[0] == "EV" && f.size() >= 4) {
-            // BT4RD|EV|me/opp|type|detail
-            session_.tl_ev.push_back({rel_ms, f[1], f[2], f[3]});
-            CombatSide& cs = (f[1] == "me") ? session_.combat_me : session_.combat_opp;
-            if (f[2] == "sparking") ++cs.sparking;
-            else if (f[2] == "counter") ++cs.counters;
-            else if (f[2] == "first_attack") ++cs.first_attack;
-            else if (f[2] == "boost") ++cs.boosts;
-            else if (f[2] == "switch") ++cs.switches;
-        } else if (f[0] == "COMBO" && f.size() >= 4) {
-            // BT4RD|COMBO|me/opp|hits|dmg
-            CombatSide& cs = (f[1] == "me") ? session_.combat_me : session_.combat_opp;
-            int hits = std::atoi(f[2].c_str()), dmg = std::atoi(f[3].c_str());
-            if (hits >= 2) {
-                ++cs.combo_n;
-                cs.combo_sum += hits;
-                if (hits > cs.combo_max) cs.combo_max = hits;
-                if (dmg > cs.combo_max_dmg) cs.combo_max_dmg = dmg;
-            }
-        } else if (f[0] == "SUM" && f.size() >= 11) {
-            // BT4RD|SUM|me_dmg|opp_dmg|me_heal|opp_heal|me_sp_s|opp_sp_s|me_chg_s|opp_chg_s|result|end_type
-            session_.combat_me.dmg   = std::atoi(f[1].c_str());
-            session_.combat_opp.dmg  = std::atoi(f[2].c_str());
-            session_.combat_me.taken = session_.combat_opp.dmg;
-            session_.combat_opp.taken = session_.combat_me.dmg;
-            session_.combat_me.healed  = std::atoi(f[3].c_str());
-            session_.combat_opp.healed = std::atoi(f[4].c_str());
-            session_.combat_me.sparking_s  = std::atof(f[5].c_str());
-            session_.combat_opp.sparking_s = std::atof(f[6].c_str());
-            session_.combat_me.charge_s  = std::atof(f[7].c_str());
-            session_.combat_opp.charge_s = std::atof(f[8].c_str());
-            if (!f[9].empty() && f[9] != "unknown") session_.result = f[9];
-            if (!f[10].empty()) session_.end_type = f[10];
         }
     }
 
@@ -725,20 +807,16 @@ private:
         std::string end_local = now_local_iso(false);
         double dur_s = std::max(0.1, end_unix - session_.start_unix);
 
-        // RTT stats
         auto rtts = session_.rtt_samples;
         std::sort(rtts.begin(), rtts.end());
-        double rtt_sum = 0;
-        for (int x : rtts) rtt_sum += x;
+        double rtt_sum = 0; for (int x : rtts) rtt_sum += x;
         double rtt_avg = rtt_sum / rtts.size();
-        double rtt_var = 0;
-        for (int x : rtts) { double d = x - rtt_avg; rtt_var += d * d; }
+        double rtt_var = 0; for (int x : rtts) { double d = x - rtt_avg; rtt_var += d * d; }
         double rtt_sd = std::sqrt(rtt_var / rtts.size());
         int rtt_min = rtts.front(), rtt_max = rtts.back();
         int rtt_med = rtts[rtts.size() / 2];
         int rtt_p95 = rtts[(size_t)(0.95 * (rtts.size() - 1))];
 
-        // Delay stats
         double delay_avg = 0; int delay_min = 0, delay_max = 0, delay_p95 = 0;
         if (!session_.delay_samples.empty()) {
             auto ds = session_.delay_samples;
@@ -749,7 +827,6 @@ private:
             delay_p95 = ds[(size_t)(0.95 * (ds.size() - 1))];
         }
 
-        // FPS stats
         double fps_avg = 0, fps_low1 = 0, fps_min = 0;
         if (!session_.fps_samples.empty()) {
             auto fs = session_.fps_samples;
@@ -761,18 +838,16 @@ private:
         }
 
         std::string opp = session_.opponent.empty() ? ("unknown_" + session_.match_id) : session_.opponent;
-        std::string oid = session_.opponent_id.empty() ? (session_.region.empty() ? "" : (opp + "@" + session_.region)) : session_.opponent_id;
+        std::string oid = session_.opponent_id.empty() ? (session_.opponent.empty() ? "" : session_.opponent) : session_.opponent_id;
 
-        // Write timeline if enabled
         bool wrote_tl = false;
         if (cfg.timeline) {
             wrote_tl = write_timeline_files((int)(dur_s * 1000.0));
         }
 
-        // Build matches.jsonl record (compatible with Sparking Ranked Details viewer + BT4 rollback fields)
         std::ostringstream j;
         j << std::fixed << std::setprecision(1);
-        j << "{\"schema_version\":1,\"writer\":\"BT4RankedDetails 1.0.0\""
+        j << "{\"schema_version\":1,\"writer\":\"BT4 Rankeds Details 1.1.0\""
           << ",\"match_id\":" << json_str(session_.match_id)
           << ",\"start_local\":" << json_str(session_.start_local)
           << ",\"end_local\":" << json_str(end_local)
@@ -832,7 +907,7 @@ private:
                 j << "[";
                 for (size_t i = 0; i < t.size(); ++i) {
                     if (i) j << ",";
-                    j << "{\"id\":" << json_str(t[i].id) << ",\"name\":" << json_str(t[i].name) << ",\"short\":" << json_str(t[i].name) << ",\"dp\":1}";
+                    j << "{\"id\":" << json_str(t[i].id) << ",\"name\":" << json_str(t[i].name) << ",\"short\":" << json_str(t[i].name) << "}";
                 }
                 j << "]";
             };
@@ -842,14 +917,16 @@ private:
                 j << ",\"active_end\":{\"me\":" << json_str(session_.active_me_id) << ",\"opp\":" << json_str(session_.active_opp_id) << "}";
             }
         }
-        if (session_.combat_me.dmg > 0 || session_.combat_opp.dmg > 0 || session_.combat_me.combo_n > 0) {
+        if (session_.combat_me.dmg > 0 || session_.combat_opp.dmg > 0 || session_.combat_me.combo_n > 0 || session_.combat_opp.combo_n > 0) {
             auto emit_cs = [&](const CombatSide& c) {
                 double cavg = c.combo_n ? ((double)c.combo_sum / c.combo_n) : 0.0;
-                j << "{\"dmg\":" << c.dmg << ",\"taken\":" << c.taken << ",\"healed\":" << c.healed
+                j << "{\"dmg\":" << c.dmg << ",\"taken\":" << c.taken
+                  << ",\"healed\":" << c.healed << ",\"heal_n\":" << c.heal_n
+                  << ",\"hits\":{\"melee\":" << c.hits_total << "}"
                   << ",\"combo\":{\"n\":" << c.combo_n << ",\"max\":" << c.combo_max << ",\"avg\":" << cavg << ",\"max_dmg\":" << c.combo_max_dmg << "}"
                   << ",\"sparking\":" << c.sparking << ",\"sparking_s\":" << c.sparking_s
                   << ",\"switches\":" << c.switches << ",\"super_counter\":" << c.counters
-                  << ",\"charge_s\":" << c.charge_s << "}";
+                  << ",\"skill_spent\":" << c.blast_spent << ",\"charge_s\":" << c.charge_s << "}";
             };
             j << ",\"combat\":{\"v\":2,\"me\":"; emit_cs(session_.combat_me);
             j << ",\"opp\":"; emit_cs(session_.combat_opp);
@@ -865,7 +942,6 @@ private:
 
         append_file_line(data_dir_ + L"\\matches.jsonl", j.str());
 
-        // Compact NATIVE_END tab line in matches.log
         std::ostringstream lg;
         lg << std::fixed << std::setprecision(1)
            << "NATIVE_END\t" << end_local
@@ -877,10 +953,9 @@ private:
            << "\tduration_s=" << (int)std::lround(dur_s) << "\tresult=" << session_.result << "\treason=" << end_reason;
         append_file_line(data_dir_ + L"\\matches.log", lg.str());
 
-        // Incident log
         if (cfg.debug_incidents && session_.has_incident) {
             std::ostringstream inc;
-            inc << "{\"v\":1,\"writer\":\"BT4RankedDetails 1.0.0\",\"time_local\":" << json_str(end_local)
+            inc << "{\"v\":1,\"writer\":\"BT4 Rankeds Details 1.1.0\",\"time_local\":" << json_str(end_local)
                 << ",\"match_id\":" << json_str(session_.match_id)
                 << ",\"kind\":" << json_str(session_.incident_kind)
                 << ",\"code_name\":" << json_str(session_.incident_detail)
@@ -891,7 +966,8 @@ private:
         }
 
         rebuild_history_js();
-        log_line("match saved " + session_.match_id + " samples=" + std::to_string(rtts.size()) + " avg_ms=" + std::to_string((int)rtt_avg));
+        log_line("match saved " + session_.match_id + " opp=" + opp + " samples=" + std::to_string(rtts.size()) +
+                 " avg_ms=" + std::to_string((int)rtt_avg) + " dmg=" + std::to_string(session_.combat_me.dmg) + "/" + std::to_string(session_.combat_opp.dmg));
     }
 
     bool write_timeline_files(int dur_ms) {
@@ -959,10 +1035,7 @@ private:
         t << "}";
 
         std::string raw = t.str();
-        if (raw.size() > 65536) {
-            // Hard 64 KB cap like Sparking Ranked Details
-            raw.resize(65000);
-        }
+        if (raw.size() > 65536) raw.resize(65000);
 
         std::wstring wid(session_.match_id.begin(), session_.match_id.end());
         write_file_atomic(tl_data_dir_ + L"\\" + wid + L".json", raw);
@@ -973,7 +1046,7 @@ private:
     void write_state_json() {
         std::ostringstream s;
         s << std::fixed << std::setprecision(1)
-          << "{\"writer\":\"BT4RankedDetails 1.0.0\""
+          << "{\"writer\":\"BT4 Rankeds Details 1.1.0\""
           << ",\"time\":" << json_str(now_local_iso())
           << ",\"in_session\":" << (live_.in_session ? "true" : "false")
           << ",\"online\":" << (live_.online ? "true" : "false")
@@ -1004,14 +1077,11 @@ private:
             while (std::getline(f, line)) {
                 line = trim(line);
                 if (line.size() < 2 || line.front() != '{') continue;
-                // Map matches.jsonl keys to viewer's flat keys inline
                 std::string ts, mid;
                 json_extract_string(line, "end_local", ts);
                 json_extract_string(line, "match_id", mid);
-                // Inject flat ts, avg_ms, min_ms, max_ms, sd_ms, timeline_file for direct app.js compatibility
                 std::string patched = line.substr(0, line.size() - 1);
                 if (!ts.empty()) patched += ",\"ts\":" + json_str(ts);
-                // Extract rtt_ms block numbers
                 size_t rp = line.find("\"rtt_ms\":{");
                 if (rp != std::string::npos) {
                     size_t re = line.find('}', rp);
@@ -1052,11 +1122,11 @@ private:
 
         std::string gen = now_local_iso();
         std::ostringstream out;
-        out << "// Generated by BT4RankedDetails (in-game, after each online match) - do not edit.\n"
+        out << "// Generated by BT4 Rankeds Details (in-game, after each online match) - do not edit.\n"
             << "window.SZ_GENERATED = " << json_str(gen) << ";\n"
             << "window.SZ_META = {\n"
             << "  \"generated\": " << json_str(gen) << ",\n"
-            << "  \"writer\": \"BT4RankedDetails 1.0.0\",\n"
+            << "  \"writer\": \"BT4 Rankeds Details 1.1.0\",\n"
             << "  \"source\": \"jsonl\",\n"
             << "  \"log_missing\": false,\n"
             << "  \"csv_present\": false,\n"
