@@ -1,0 +1,11 @@
+build/
+*.obj
+*.exp
+*.lib
+*.pdb
+*.tmp
+__pycache__/
+ranked_details/data/
+history/timelines/
+history/finishes/
+.vs/

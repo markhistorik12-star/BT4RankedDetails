@@ -1,0 +1,1146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<!-- the theme chosen in the header (lib/theme.js), applied before the first paint; file:// storage can throw -->
+<script>try { var t = localStorage.getItem('srd.theme.v1'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+<title>BT4 Ranked Details - Match History</title>
+  <script defer src="./app.js"></script>
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div id="app"></div>
+<!-- "What the numbers mean" (footer of every page + About), cloned by src/components/Legend.svelte; kept here so it does not count against the app.js size budget -->
+<template id="legend-src">
+<section class="gsec" data-g="conn"><h2>Connection</h2>
+<dl class="legend">
+<dt>Avg ms</dt><dd><p>Average round-trip time to the opponent, measured by the game's own netcode (your inputs reach them in roughly half of that, plus the game's input delay).</p></dd>
+<dt>Min / Max</dt><dd><p>Best and worst round trip in the match.</p></dd>
+<dt>Jitter</dt><dd><p>How much the round trip swung (standard deviation); low means a steady connection.</p></dd>
+<dt>Avg delay (f)</dt><dd><p>Online input delay in frames (1 f = 1/60 s = 16.7 ms): how long the netcode holds your button press before it happens on both screens.</p><details class="gmore"><summary>More</summary><p>The game adapts it during the match (about half the ping plus a safety margin, +1 after a stall), so it is the lag you actually feel. The list shows the match average; the match page adds min – max, p95 and how often it changed, and the timeline draws it as a step line, next to the opponent's own input delay (dashed orange, read from the headers of their packets; a break = not measured, e.g. right after a stall).</p><details class="tech"><summary>Technical details</summary><p>Filled in when the mod's delay measurement is on (<code>delay_scan = 1</code>, the default) and it could read the value in that match.</p></details></details></dd>
+<dt>Stalls</dt><dd><p>Times the game froze waiting for the opponent's input (the seconds stalled in brackets).</p></dd>
+<dt>Packet loss</dt><dd><p>The share of the opponent's packets that only arrived through a <b>resend</b>, because the first copy was lost or late on the way.</p><details class="gmore"><summary>More</summary><p>The game sends everything over Steam without delivery guarantees and resends missing packets itself; the mod reads the game's own counter of those (the same number that lowers the game's signal grade by a step at 5 %), so this is <i>about</i> packet loss, not an exact loss count. Only the opponent → you direction: your packets lost on the way to them show on their side. Match page: a tile (% · resent of packets · bursts) and pink ticks at the bottom of the ping chart, one per burst (taller = more packets; hover for the count). A resend costs about one round trip, so bursts often line up with stalls.</p><details class="tech"><summary>Technical details</summary><p>From v1.8.0 on (online matches).</p></details></details></dd>
+<dt>Colour bands</dt><dd><p>The game's own signal grades: <span class="c1">&lt;66 ms green (Great)</span>, <span class="c2">66-133 yellow (Decent)</span>, <span class="c3">133-266 orange (Rough)</span>, <span class="c4">266-532 and &gt;532 ms red (Poor)</span>.</p><details class="gmore"><summary>More</summary><p>Rows are tinted with the grade of their average; the match page and the share picture name the grade (Signal).</p></details></dd>
+<dt>Ping per match</dt><dd><p>The ping chart on an opponent page (Connection tab): your average ping in each match against that opponent, oldest to newest, on the grade colours, with a bar from the lowest to the highest ping of the match (hover a point for its date and ms).</p></dd>
+</dl></section>
+<section class="gsec" data-g="rank"><h2>Results and ranked points</h2>
+<dl class="legend">
+<dt>W/L</dt><dd><p>Result from your side: <b class="rw">W</b> win, <b class="rl">L</b> loss, <b class="rd">D</b> draw, <b class="ru">?</b> unknown (the match ended without a KO being seen, e.g. a disconnect, or it was recorded before v1.1.0).</p><details class="gmore"><summary>More</summary><p>Win rate counts wins and losses only; hover a result for how the match ended.</p></details></dd>
+<dt>H2H</dt><dd><p>Your head-to-head record against that opponent after that match (W-L, or W-L-D with draws), shown from the second meeting on.</p><details class="gmore"><summary>More</summary><p>It is counted over all matches, whatever the filter.</p></details></dd>
+<dt>Points</dt><dd><p>Ranked points won (<b class="rw">+N</b>) or lost (<b class="rl">-N</b>) in that match, from v1.7.0 on (older matches and matches where no change was seen: –).</p><details class="gmore"><summary>More</summary><p>"(unconfirmed)" = recorded before the source of the value was checked against the number the game showed.</p><details class="tech"><summary>Technical details</summary><p>The mod reads the game's own rank values before the match and after the result (read-only, <code>rank_lookup = 1</code>); hover for the rank and points before → after.</p></details></details></dd>
+<dt>Rank</dt><dd><p>Matches page header: your current total points and rank for Singles and DP (the game's rank name, e.g. <i>Singles 30,326 · Z</i>), plus your current ranked win streak and your longest one (best), read after your newest recorded match; – until a match has recorded it.</p><details class="gmore"><summary>More</summary><p>The match page shows the points of that match under the result (hover: rank and points before → after and the win streak before → after).</p></details></dd>
+<dt>Win streak</dt><dd><p>Yours: from the game's own ranked stats (header, and before → after on the match page).</p><details class="gmore"><summary>More</summary><details class="tech"><summary>Technical details</summary><p>The opponent's (<span class="osk">87W</span> next to their name, "their win streak" on the match page, a tile on the opponent page): read from the game's player card before the fight (v1.8.0, still being verified: the mod reads the player-info texts of the versus / result screen).</p></details></details></dd>
+<dt>Special finish</dt><dd><p><span class="fin">★</span> next to the result: the match (or a DP round) ended with a <b>dramatic finish</b> of an ultimate (e.g. Master Roshi's Evil Containment Wave, Goku's Angry Kamehameha, Dragon Fist, Spirit Bomb; Giant = vs a giant), read from the game's own win type; the match page names the ultimate and who did it, the share picture says "dramatic finish".</p></dd>
+<dt>DC</dt><dd><p>Next to the result: the fight ended without a KO / time up (someone quit or disconnected).</p><details class="gmore"><summary>More</summary><p>The result stays <b class="ru">?</b>; if the game still moved your ranked points, the Points column shows them and the match page says what the points imply (win / loss).</p></details></dd>
+<dt>Streak, form</dt><dd><p>On the opponent pages: every result oldest to newest (click a square for the match), the current streak (unknown results are skipped) and the last 5 / 10 form.</p></dd>
+</dl></section>
+<section class="gsec" data-g="combat"><h2>Combat</h2>
+<dl class="legend">
+<dt>Match details</dt><dd><p>Side-by-side comparison You | Opponent (damage, attacks, combos, guard, counters &amp; wars, Sparking! ...).</p><details class="gmore"><summary>More</summary><p>The better value is highlighted (higher, or lower for guard breaks suffered and hits before a super counter); neutral rows are not.</p></details></dd>
+<dt>Counters &amp; wars</dt><dd><p><b>Super counter</b> = the counter you start while being hit; <b>vanish</b> = the teleport dodge.</p><details class="gmore"><summary>More</summary><p>A <b>war</b> is 2 or more of them back and forth (at most 0.9 s apart): a <i>vanish war</i> (only vanishes), a <i>super counter war</i> (only super counters) or a <i>mixed war</i>. <b>Longest war</b> = most links in one war. <b>Clashes</b>: both sides dash into each other; the game decides the winner. Perception, revenge counters and high-speed evasions are counted per start.</p><details class="tech"><summary>Technical details</summary><p>From v1.6.0 on (older matches show – : their vanish counts mixed super counters and vanishes up). It is won by the side whose hit lands next within 1.5 s, else it is unresolved. <b>Super perception</b> (v1.8.0): the timed perception that catches a hit (the game reports the hit as super-perceived); <b>revenge counters caught by super perception</b> = the other side's revenge counter punished that way (the victim's row: <i>own revenge counters caught</i>).</p></details></details></dd>
+<dt>Vanishing attacks &amp; assaults</dt><dd><p>Per side, with the game's own names.</p><details class="gmore"><summary>More</summary><p>A <b>vanishing attack</b> (Y / Triangle after knocking the opponent away; High / Low / Left / Right with the stick) is the teleport <i>chase</i> after a launch (smash, rush finisher, counter attack); a combo allows only a few of them. A <b>vanishing assault</b> (A + X / Cross + Square, costs ki) is the teleport attack from neutral, guard or a rush: behind the opponent up close, in front of them further away; from long range it only moves you in front of them, so it shows as <b>no contact</b>. <b>Started</b> counts every attempt, also the chained ones (the 2nd, 3rd chase in one combo); <b>landed</b> = its hit connected; otherwise the other side guarded it, countered it (super counter or revenge counter), vanished, evaded it with a high-speed evasion or perceived it, the attacker was <b>hit out of it</b> first, or it made <b>no contact</b>. <b>Chains</b> = combos with 2 or more. <b>Turned into a war</b> = the other side's vanish / super counter that stopped it opened a war; <b>won a war with it</b> = its hit decided a war. Damage = the HP the other side lost during it (Training shows none: its HP gauge does not move).</p><details class="tech"><summary>Technical details</summary><p>From v1.8.0 on. Hover a timeline marker for the outcome and the game's action id (<code>actVAA</code>… = vanishing attack, <code>actVAS</code>… = vanishing assault; the ini keys <code>vanishing_attack_actions</code> / <code>vanishing_assault_actions</code> set which ids count). Records before 1.9 show one number for both.</p></details></details></dd>
+<dt>Healed</dt><dd><p>HP a character regained while it stayed on the field (regeneration, healing skills); HP changes in the 6 s after a switch or transformation are not counted.</p><details class="gmore"><summary>More</summary><p>Heals = separate healing moments (more than 1 s apart).</p><details class="tech"><summary>Technical details</summary><p>New in 1.9.1.</p></details></details></dd>
+<dt>Damage done with</dt><dd><p>Damage per hit type, from the type of the hit the victim took at each HP drop: rush attacks, smashes (the knockback heavy hits), other melee, ki blasts, blast skills (supers), ultimates, impacts, other (throws, ...).</p><details class="gmore"><summary>More</summary><p>"Inside combos" = damage of hits landed while the attacker's combo counter was 2 or more, so a combo's first hit counts outside it. Share = per cent of all damage dealt.</p><details class="tech"><summary>Technical details</summary><p>New after 1.8.0 (older matches: no rows).</p></details></details></dd>
+<dt>Wild Sense</dt><dd><p>Triggered = the Blast Forte activation (actEXA1 / actEXA2) of a character whose skill in that slot is Wild Sense (from the game's buff table).</p><details class="gmore"><summary>More</summary><p>Counter landed = while Wild Sense was armed, the character landed a melee-type hit without being in a rush, smash, throw or skill of its own (a provisional rule until the counter's own action id is calibrated); beaten = the armed character took a non-ki hit (a Perception counter, a grab).</p><details class="tech"><summary>Technical details</summary><p>New after 1.8.0.</p></details></details></dd>
+<dt>Kicks, sweeps, chases</dt><dd><p><b>Flying kick</b> and <b>sweep</b> (Grand Slash, the low one) are rush chain attacks; <b>charged</b> = the sweep was held.</p><details class="gmore"><summary>More</summary><p><b>Blocked</b> = guarded. A <b>chase</b> is Dragon Homing, the dash after the opponent is knocked away (not the vanishing attack); <b>hit %</b> = chases that landed.</p><details class="tech"><summary>Technical details</summary><p>New after 1.8.0 (older matches: no rows).</p></details></details></dd>
+<dt>Avg hits before SC</dt><dd><p>How many hits of the opponent's rush a player took (the countered hit included, blocked hits not) before super countering.</p><details class="gmore"><summary>More</summary><p>Counters inside vanish / super counter exchanges (e.g. against a follow-up rush right after a vanish) still count as super counters and in the wars, but not here: they are listed as <b>SC in exchanges</b> and marked "in exchange" on the timeline. <b>Lower is better</b> (an earlier counter). <b>Earliest</b> = the fewest in the match. On an opponent page: their and your average over all matches against each other.</p><details class="tech"><summary>Technical details</summary><p>From v1.7.3 on only super counters off a rush chain <b>from neutral</b> count: the rush started with no super counter, counter attack, vanish, vanishing attack / assault or revenge counter by either side (and no war / exchange ending) in the 1.5 s before it and none during it.</p></details></details></dd>
+</dl></section>
+<section class="gsec" data-g="ui"><h2>Pages and buttons</h2>
+<dl class="legend">
+<dt>Mode</dt><dd><p><span class="mode m1">Ranked</span>, <span class="mode">Quick</span> or <span class="mode">Player</span> (lobby) match; R / Q / P on a phone.</p></dd>
+<dt>Incidents</dt><dd><p>Incident log (on by default; <code>debug_incidents = 0</code> in <code>BT4RankedDetails.ini</code> turns it off): an online match that ended abnormally or saw a network error gets a red <span class="dc">!</span> and a line on the Incidents page (error code shown by the game, battle phase, time since the start / the KO, HP of both sides, ping, stalls, points before → after, the last 20 s).</p></dd>
+<dt>Characters</dt><dd><p>Your character(s) vs the opponent's (v1.2.0 on; hover for full names and DP).</p><details class="gmore"><summary>More</summary><p><b>Singles</b> / <b>DP</b> = the battle format; the Format filter applies to every list and to the totals.</p></details></dd>
+<dt>Timeline</dt><dd><p>With <code>timeline = 1</code> (the default): HP of both sides (in DP battles every character is its own line, a dashed line marks the switch), event markers, stall bands, the ping (a white line; dark in the light theme) with the game's grade bands and a 2 s min/max envelope, your input delay (blue) and theirs (dashed orange), and your FPS against the opponent's.</p></dd>
+<dt>Timeline chips</dt><dd><p>Click to show or hide a line; remembered in this browser (every match uses the same choice).</p><details class="gmore"><summary>More</summary><p><b>▾ HP</b> / <b>▾ Latency</b> folds the whole chart; the axes fit what is shown.</p></details></dd>
+<dt>Pinned</dt><dd><p>The pin button on an opponent row (shown on hover) or on the opponent page keeps that opponent in the Pinned block at the top of Opponents (whatever the sort); pinned opponents get a small pin in the match list.</p><details class="gmore"><summary>More</summary><p>Pins are stored in this browser only (not in data.js), so another browser or a cleared browser storage starts without them.</p></details></dd>
+<dt>Pages</dt><dd><p>Lists with more than 100 rows (matches, the matches vs one opponent, many opponents or teams) are split into pages of 100; "Showing 101–200 of 1,234" counts the rows of the current filter.</p></dd>
+<dt>Reload</dt><dd><p>The page loads <code>data.js</code> once.</p><details class="gmore"><summary>More</summary><p>After a match, click <b>Reload</b> at the bottom of the page (or F5).</p></details></dd>
+<dt>Share</dt><dd><p>Copies a square picture of the match to the clipboard (paste it into Discord); <b>Preview</b> shows it with a Download PNG button.</p></dd>
+</dl></section>
+</template>
+<!-- "How to use it" (About page), cloned by Legend.svelte src="howto-src" -->
+<template id="howto-src">
+<ul>
+<li>Open <code>ranked_details\history\index.html</code> in your browser (double-click). It works straight from the file and loads nothing from the internet.</li>
+<li>The mod rewrites <code>data.js</code> at game start and after every real online match. The page reads it once when it opens: click <b>Reload</b> at the bottom of the page (or press F5) to see new matches; you stay on the same page.</li>
+<li>Long lists show 100 rows per page (‹ Prev 1 2 3 … Next ›); filters, search and sort always work over all matches. The page number is in the link, so reload and back / forward keep it.</li>
+<li><b>Matches</b>: filter by mode, format and opponent, click a column title to sort, click a row (or Open in the Full view column) to open the match page; the Steam column opens the opponent's Steam profile; ▾ in the Quick view column unfolds the match summary under its row (↑ / ↓ move it, Esc folds it); choose 10, 20 or 50 matches per page (remembered in this browser). A record of a fight that never happened (no result, a few seconds long) has a Delete button: it is hidden in this browser (Undo, or Restore all under the list); the data file keeps it. <b>Ended badly</b> lists the matches that ended abnormally. <b>Opponents</b>: one row per opponent (grouped by Account ID, so renamed players stay together); pick the order in <i>Sort by</i>; an opponent's page has the same tabs as a match. <b>Characters</b>: a card per character and DP team; click one for its matches. <b>You</b>: your ranked points over time, the win rate per week and your habits.</li>
+<li>Keyboard: <kbd>/</kbd> search an opponent, <kbd>←</kbd> / <kbd>→</kbd> older / newer match, <kbd>1</kbd>–<kbd>4</kbd> the match tabs, <kbd>Esc</kbd> back to the list, <kbd>?</kbd> all shortcuts. Every page has its own link (bookmark it, the browser's back button works).</li>
+<li>Put your exact in-game name in <code>data\my_name.txt</code> if the opponent is ever picked wrong.</li>
+<li>Timeline chips: click to show or hide a line; remembered in this browser (the same choice for every match; ▾ HP / ▾ Latency folds a whole chart).</li>
+<li>Timeline: on by default (<code>timeline = 1</code> in <code>BT4RankedDetails.ini</code>); matches recorded while it was off have none.</li>
+<li><code>refresh.bat</code> (optional, needs Python 3) rebuilds <code>data.js</code> from <code>..\data\matches.jsonl</code> and opens the page.</li>
+</ul>
+</template>
+<!-- Match details rows (CmpTable.svelte): "#Section" or label|path in combat.me/opp|better (1 higher, -1 lower, 0 neutral)|format (K 12.3k, F 1 decimal, P %, S seconds)|bar|v1.6.0 stat (1 hidden in older records, 2 shown as "–") -->
+<template id="tips-src">
+fpsg|Your 1-second average as your game sends it to the opponent: the same number, sampled the same way as theirs (on each change, about every 3 s)
+fpso|Your 1-second average from your own frame times (this match has no number from your game). Waits for the opponent are not counted.
+fpsr|Reported by the opponent’s game: its 1-second average, sent at most every 3 s, so single-frame hitches on their side never show
+dsg| (your number as your game sends it, sampled like theirs)
+dso| (your own 1-s windows: this match has no number from your game)
+dst| (the number their game reports)
+cu|A one-frame reading at the very end of the match (the netcode stopping at the KO, recorded by a pre-release build) is not counted as catch-up
+drop|A drop = the 1-second average under {0} fps{1}; single slow frames are not counted. Time = how long it stayed under (under 55 / 50: {2} / {3} s); frames lost ≈ Σ (60 − fps) × time, an estimate. The opponent’s number (and yours as your game sends it) is updated about every 3 s, so short hitches are smoothed out. Stalls ({4}): {5} during their drops, {6} near yours, {7} with no drop on either side (probably the connection); a drop counts from 1 s before the report that showed it to 1 s after it
+odl|The opponent's input delay (match average), from the headers of their packets
+loss|Packets from the opponent that only arrived through a resend (the first copy was lost or late on the way), counted by the game's own netcode: about packet loss. Your packets lost on the way to them count on their side. The game's signal grade drops a step at 5 %.
+</template>
+<template id="hab-src">
+Rush chains|used.rush_chains
+Smashes|used.smash
+Ki blasts|used.ki
+Skills|used.skill
+Throws|used.throw
+Flying kicks|flying_kick.n
+Sweeps|sweep.n
+Chases|chase.n
+Vanish attacks|va.n
+Vanish assaults|vas.n
+Vanishes|vanish
+Super counters|super_counter
+Revenge counters|revenge
+Perceptions|perception.n
+Z-bursts|zburst
+Dragon dashes|dragon_dash
+#
+Flying kicks|flying_kick
+Sweeps|sweep
+Charged sweeps|sweep_charged
+Chases (Dragon Homing)|chase
+Vanishing attacks|va
+Vanishing assaults|vas
+</template>
+<template id="cmp-src">
+#Damage
+Damage dealt|dmg|1|K
+Healed|healed|1|K
+Heals|heal_n|1
+Rush hits|hits.rush|1
+Smash hits|hits.smash|1
+Other melee hits|hits.melee|1
+Ki blast hits|hits.ki|1
+Blast skill hits|hits.skill|1
+Ultimate hits|hits.ult|1
+Impact hits|hits.impact|1
+#Attacks
+Rush chains|used.rush_chains|0
+Longest rush chain|used.rush_max|1
+Smash attacks|used.smash|0
+Ki blasts|used.ki|0
+Blast skills|used.skill|0
+Ultimates|used.ult|0
+Throws|used.throw|0
+#Combos
+Combos (2+ hits)|combo.n|1
+Longest combo|combo.max|1
+Average combo|combo.avg|1|F
+Biggest combo damage|combo.max_dmg|1|K
+Combos with a vanishing attack|combo.vanish|0
+Combos with dragon homing|combo.homing|0
+#Movement &amp; defence
+Air time|air_pct|0|P|1
+Guard time (% of match)|guard_pct|0|P|1
+Guard time|guard_s|0|S
+Guard activations|guard_n|0
+Hits blocked|guard_hits|1
+Guard breaks suffered|guard_breaks|-1
+High-speed evasions|hse|0|||1
+#Counters &amp; wars
+Super counters|super_counter|1|||2
+Avg hits before super counter|sc_hits.avg|-1|F||2
+Earliest super counter (hits)|sc_hits.min|-1|||1
+SC in exchanges (not in avg)|sc_hits.excluded|0|||1
+Vanishes|vanish|1|||2
+Vanish wars|wars.vanish.n|0|||1
+Vanish wars won|wars.vanish.won|1|||2
+Vanish wars lost (failed vanish, hit out of it)|wars.vanish.lost|-1|||1
+Super counter wars|wars.super_counter.n|0|||1
+Super counter wars won|wars.super_counter.won|1|||2
+Super counter wars lost|wars.super_counter.lost|-1|||1
+Mixed wars|wars.mixed.n|0|||1
+Mixed wars won|wars.mixed.won|1|||1
+Mixed wars lost|wars.mixed.lost|-1|||1
+Longest war (links)|wars.max|0|||1
+Clashes|clash.n|0|||1
+Clashes won|clash.won|1|||2
+Revenge counters|revenge|0
+Perception attempts|perception.n|0
+Perception successes|perception.ok|1
+Super perceptions|super_perception|1|||1
+Revenge counters caught by super perception|rvc_sp|1|||1
+Revenge counters caught by perception|rvc_p|1|||1
+Own revenge counters caught (super perception)|rvc_caught|-1|||1
+Own revenge counters caught (perception)|rvc_caught_p|-1|||1
+Z-burst dashes|zburst|0
+Dragon homing (follow-ups)|dragon_homing|0
+Dragon dashes|dragon_dash|0
+Vanishing attacks + assaults|vanish_attack|0|||1
+#Vanishing attacks (chase)
+Started|va.n|0|||1
+Landed|va.landed|1|||1
+Damage dealt with them|va.dmg|1|K||1
+Chains (2+ in one combo)|va.chains|1|||1
+Longest chain|va.chain_max|1|||1
+Guarded by the other side|va.guarded|-1|||1
+Countered by the other side|va.countered|-1|||1
+Vanished by the other side|va.vanished|-1|||1
+Evaded (high-speed evasion)|va.evaded|-1|||1
+Perceived by the other side|va.perceived|-1|||1
+Hit out of it|va.interrupted|-1|||1
+No contact|va.missed|-1|||1
+Turned into a war (their vanish / counter)|va.war_open|0|||1
+Won a war with it (deciding hit)|va.war_end|1|||1
+#Wild Sense
+Wild Sense triggered|wild_sense.n|0|||1
+Wild Sense counter landed|wild_sense.hit|1|||1
+Wild Sense hit %|wild_sense.hit/wild_sense.n|1|P|1
+Wild Sense beaten (hit through it)|wild_sense.lost|-1|||1
+#Vanishing assaults
+Started|vas.n|0|||1
+Landed|vas.landed|1|||1
+Damage dealt with them|vas.dmg|1|K||1
+Chains (2+ in one combo)|vas.chains|1|||1
+Guarded by the other side|vas.guarded|-1|||1
+Countered by the other side|vas.countered|-1|||1
+Vanished by the other side|vas.vanished|-1|||1
+Evaded (high-speed evasion)|vas.evaded|-1|||1
+Perceived by the other side|vas.perceived|-1|||1
+Hit out of it|vas.interrupted|-1|||1
+No contact|vas.missed|-1|||1
+Turned into a war (their vanish / counter)|vas.war_open|0|||1
+Won a war with it (deciding hit)|vas.war_end|1|||1
+#Flying kicks &amp; sweeps
+Flying kicks|flying_kick.n|0
+Flying kicks landed %|flying_kick.landed/flying_kick.n|1|P|1
+Flying kicks blocked|flying_kick.guarded|-1
+Flying kicks blocked %|flying_kick.guarded/flying_kick.n|-1|P|1
+Flying kicks vanished|flying_kick.vanished|-1
+Flying kicks vanished %|flying_kick.vanished/flying_kick.n|-1|P|1
+Sweeps|sweep.n|0
+Sweeps landed %|sweep.landed/sweep.n|1|P|1
+Sweeps blocked|sweep.guarded|-1
+Sweeps blocked %|sweep.guarded/sweep.n|-1|P|1
+Sweeps vanished|sweep.vanished|-1
+Sweeps vanished %|sweep.vanished/sweep.n|-1|P|1
+Charged sweeps|sweep_charged.n|0
+Charged sweeps blocked|sweep_charged.guarded|-1
+Charged sweeps blocked %|sweep_charged.guarded/sweep_charged.n|-1|P|1
+Charged sweeps vanished|sweep_charged.vanished|-1
+#Dragon homing chases
+Chases (after a knock-away)|chase.n|0
+Chase hit %|chase.landed/chase.n|1|P|1
+Landed|chase.landed|1
+Vanished (high-speed evasion out of the chase)|chase.evaded|-1
+Vanished (teleport)|chase.vanished|-1
+Guarded|chase.guarded|-1
+Countered|chase.countered|-1
+No contact|chase.missed|-1
+#Resources
+Max Power activations|sparking|0
+Time in Max Power|sparking_s|0|S
+Transformations|transform|0
+Character switches|switches|0
+Skill count spent|skill_spent|0
+Ki charge time|charge_s|0|S
+</template>
+<!-- timeline marker key (Timeline.svelte, under the chips): the glyphs are the paths symbolPath() draws (one per type) -->
+<template id="tlmk-src"><div class="symleg"><p class="muted small">Markers (blue = you, lower row · orange = opponent, upper row)</p><ul class="symgrid"><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,-4.5L4.5,0L0,4.5L-4.5,0Z"/></svg><span>Super</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,-5.2L1.2,-1.6L4.9,-1.6L1.9,0.6L3,4.2L0,2L-3,4.2L-1.9,0.6L-4.9,-1.6L-1.2,-1.6Z"/></svg><span>Ultimate</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-5.85,0a5.85,5.85 0 1,0 11.7,0a5.85,5.85 0 1,0 -11.7,0ZM-4.27,0a4.27,4.27 0 1,0 8.55,0a4.27,4.27 0 1,0 -8.55,0ZM0,-3.2L0.7,-1L3.1,-1L1.2,0.4L1.9,2.6L0,1.3L-1.9,2.6L-1.2,0.4L-3.1,-1L-0.7,-1Z"/></svg><span>Special finish</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,-4.5L4.5,3.6L-4.5,3.6Z"/></svg><span>Super counter</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,4.5L4.5,-3.6L-4.5,-3.6Z"/></svg><span>Vanish</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-3.6L0,0L-4.5,3.6M0,-3.6L4.5,0L0,3.6"/></svg><span>Vanishing attack (chase)</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,0a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0ZM-0.9,0H4.5M1.13,-3.15L4.5,0L1.13,3.15"/></svg><span>Vanishing assault</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M1.35,-4.5L-3.15,0.67H0L-1.35,4.5L3.15,-0.67H0Z"/></svg><span>Clash won</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-3.6,-3.6h7.2v7.2h-7.2Z"/></svg><span>Revenge counter</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-4.5h9v9h-9ZM-2.25,0H2.25M0,-2.25V2.25"/></svg><span>Revenge counter caught by super perception</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,0a4.5,4.5 0 1,0 9,0a4.5,4.5 0 1,0 -9,0Z"/></svg><span>Sparking</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-4.5L4.5,4.5M4.5,-4.5L-4.5,4.5"/></svg><span>Guard break</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-5.4,0a5.4,5.4 0 1,0 10.8,0a5.4,5.4 0 1,0 -10.8,0ZM-2.25,-2.25L2.25,2.25M2.25,-2.25L-2.25,2.25"/></svg><span>KO</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-3.6v7.2M-4.5,0H4.5M4.5,-3.6v7.2"/></svg><span>Wars (top lane): from the first link to the deciding hit, in the winner's colour (grey = unresolved)</span></li></ul><p class="muted small">Dashed line = switch / transformation · each character on the field is its own HP line · stall = the game waiting for the opponent</p></div></template>
+<!-- v1.9.0 FPS chart legend (Timeline.svelte) and the catch-up explainer (Match.svelte, Timeline.svelte); v1.9.1: fair comparison -->
+<template id="tlfps-src"><p class="tl-note small"><b>Blue</b> = your FPS · <b>dashed orange</b> = opponent FPS (both as the game reports them, about every 3 s) · <b>red</b> = stall · <b>orange shading</b> = their drops · <b>purple</b> = catch-up · <b>dark ticks</b> = a load hitch: one long frame on your PC at a switch / transformation (not an FPS drop; the 1-s average hides it) · opponent waited on you (inferred): <svg class="lg ow" viewBox="-7 -7 14 14" aria-hidden="true"><path class="pc" d="M0,4.5L4.5,-3.6L-4.5,-3.6Z"/></svg> after a load hitch on your PC, <svg class="lg ow" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,4.5L4.5,-3.6L-4.5,-3.6Z"/></svg> your inputs arrived late (network or their side) · chips: <b>Every second</b>, <b>Realtime</b></p></template>
+<template id="odlnote-src"><p class="tl-note small">Their input delay reacts to how steadily your inputs reach them: a stable opponent delay often means your ping and FPS were steady; a rising one, that your inputs sometimes arrived late, most often right after one long frame on your PC while a character loaded.</p></template>
+<template id="catchup-src"><details class="xpl"><summary>What is catch-up?</summary><ul>
+<li>The game uses <b>lockstep</b>: both games advance frame by frame, and each needs the other's input for every frame. Your input is sent a few frames ahead: that is the input delay.</li>
+<li>When inputs arrive too late (a PC dropped frames, or packets were delayed), the game missing them waits: a <b>stall</b>. Each stall makes the waiting game's delay window one frame bigger.</li>
+<li>Once a delay window reaches about 21 frames (350 ms), the netcode switches both games to <b>catch-up mode</b>: your input is taken and sent only every 2nd frame (every 3rd from 40 frames, every 4th at 60) and repeated for the frames in between. Fewer packets, coarser input. It stays on until the match ends.</li>
+<li>While your inputs are late, the opponent <b>likely</b> has to wait for them: a stall on their screen. "Opponent waited on you" is an estimate of that (a lower bound).</li>
+<li>Catch-up in a match means the connection or a PC was very laggy at some point: check the FPS chart for drops on your side.</li>
+<li>A stall while <b>their</b> FPS dips (dashed orange line) was probably their PC; stalls while both FPS lines stay near 60 were the connection.</li>
+</ul></details></template>
+<!-- Incidents page intro (Incidents.svelte) -->
+<template id="incnote-src"><p class="small muted">Online matches that ended abnormally: quit, disconnect, network error or forfeit (turn off with <code>debug_incidents = 0</code>). <b>Code</b> = the game's error code (2E795EC5 = desync, 3794033B = opponent left). Open <i>Game code and raw record</i> on a card for the details.</p></template>
+<!-- match page without a timeline (Match.svelte) -->
+<template id="tlnone-src"><p class="tl-note small">No timeline for this match (recorded while <b>timeline = 0</b>, or before 1.7.2 turned it on by default). With <b>timeline = 1</b> in <code>BT4RankedDetails.ini</code> (hot reload) every new match gets one.</p></template>
+<!-- empty states (CmpTable.svelte, Characters.svelte) -->
+<template id="nocombat-src"><p class="muted small">No combat stats for this match (recorded before v1.2.0 or with combat_tracking = 0).</p></template>
+<template id="nochars-src"><p class="notice">No character data yet for the current filter. Characters are recorded from v1.2.0 on (characters_lookup = 1).</p></template>
+<!-- v1.11.0 Spanish (lib/i18n.js): one "English text|Español" line per t() key (check-i18n.mjs lists missing ones), then the Spanish
+     copy of each long template above (id + "-es"). Outside app.js like the English templates. -->
+<template id="i18n-es">
+Ranked points still coming in|Los puntos de clasificación aún están llegando
+Sections|Secciones
+Language|Idioma
+Theme|Tema
+Light|Claro
+Dark|Oscuro
+Auto (system)|Automático (sistema)
+No data yet: start the game once with the mod installed (it builds this page’s data), then reload.|Aún no hay datos: abre el juego una vez con el mod instalado (crea los datos de esta página) y recarga.
+No matches yet.|Aún no hay partidas.
+Play an online (ranked) match with the mod installed, then click|Juega una partida online (ranked) con el mod instalado y luego pulsa
+Reload|Recargar
+Matches|Partidas
+Match|Partida
+Opponents|Rivales
+Opponent|Rival
+Characters|Personajes
+My characters|Mis personajes
+You|Tú
+Incidents|Incidencias
+Glossary|Glosario
+About|Acerca de
+Damage done with|Daño hecho con
+share of all damage dealt, biggest first|parte de todo el daño hecho, de mayor a menor
+damage|daño
+Inside combos (2+ hits)|Dentro de combos (2+ golpes)
+Hits whose type the mod cannot name yet (mostly big finishing blows). The next version logs their game type so they can be mapped.|Golpes cuyo tipo el mod aún no sabe nombrar (sobre todo golpes finales grandes). La próxima versión registra su tipo en el juego para poder asignarlos.
+Not identified yet|Sin identificar todavía
+Total|Total
+no data|sin datos
+Rush attacks|Rush
+Smashes|Smash
+Smashes, charged|Smash cargados
+Normal hits (outside a rush)|Golpes normales (fuera de un rush)
+Ki blasts|Ki blasts
+Blast skills (supers)|Blast skills (supers)
+Ultimates|Ultimates
+Impact clashes|Choques de impacto
+flying kicks|patadas voladoras
+sweeps|barridos
+vanishing attacks|vanishing attacks
+dragon homing follow-ups|seguimientos con dragon homing
+counters (super / revenge)|counters (super / revenge)
+throws|agarres
+dash attacks|ataques en carrera
+rush hits|golpes de rush
+lightning attacks|ataques relámpago
+clashes|choques
+other single strikes|otros golpes sueltos
+DP battle (team)|Batalla PD (equipo)
+Singles (1 vs 1)|Individual (1 contra 1)
+{0} non-fight record(s) hidden (samples = 0)|{0} registro(s) sin combate ocultos (samples = 0)
+{0} malformed line(s) skipped|{0} línea(s) mal formadas omitidas
+ranked CSV differs:|el CSV de ranked difiere:
+ranked CSV cross-check OK|comprobación con el CSV de ranked OK
+ignored fields:|campos ignorados:
+Data generated|Datos generados
+Load the newest data (same page)|Cargar los datos más recientes (misma página)
+Times are match end.|Las horas son el final de la partida.
+What a number means:|Qué significa cada dato:
+Source:|Origen:
+{0} matches|{0} partidas
+{0} match|{0} partida
+{0} points|{0} puntos
+Pinned opponent|Rival fijado
+Their win streak before this match|Su racha de victorias antes de esta partida
+Quit / disconnect|Abandono / desconexión
+Incident|Incidencia
+No character data (recorded before v1.2.0)|Sin datos de personajes (registrada antes de v1.2.0)
+{0} stall|{0} parón
+{0} stalls|{0} parones
+Yours vs the opponent's|Los tuyos contra los del rival
+Head-to-head after this match|Cara a cara tras esta partida
+H2H|H2H
+screenshot on the match page|captura en la página de la partida
+Head-to-head after this match (match {0} vs this opponent)|Cara a cara tras esta partida (partida {0} contra este rival)
+Pages|Páginas
+Showing {0}–{1} of {2}|Mostrando {0}–{1} de {2}
+Unpin|Desfijar
+Pin to top|Fijar arriba
+Pinned|Fijados
+Others|Otros
+Share picture|Imagen para compartir
+Share preview of the match|Vista previa de la imagen de la partida
+Copy image|Copiar imagen
+Download PNG|Descargar PNG
+Close|Cerrar
+result letter W|result letter V
+result letter L|result letter D
+result letter D|result letter E
+Win|Victoria
+Loss|Derrota
+Draw|Empate
+Unknown (no KO seen: left or disconnected)|Desconocido (no se vio KO: abandono o desconexión)
+Not recorded|No registrado
+Your session today|Tu sesión de hoy
+Your last session|Tu última sesión
+last data|últimos datos
+Record|Récord
+{0} wins|{0} de victorias
+Ranked points|Puntos de ranked
+rank|rango
+no ranked match|ninguna partida ranked
+Avg connection|Conexión media
+{0} match with stalls|{0} partida con parones
+{0} matches with stalls|{0} partidas con parones
+no stalls|sin parones
+Streak|Racha
+best ranked streak: {0}|mejor racha en ranked: {0}
+all modes|todos los modos
+Copy a picture|Copiar una imagen
+Share|Compartir
+Preview the picture|Ver la imagen
+Preview|Vista previa
+Ping per match (ms)|Ping por partida (ms)
+Ping per match: {0} to {1} ms|Ping por partida: de {0} a {1} ms
+Overall avg|Media total
+Rank|Rango
+Current ranked win streak|Racha de victorias actual en ranked
+longest {0}|la más larga {0}
+streak|racha
+best {0}|mejor {0}
+BT4 Account|Cuenta BT4
+Results, oldest to newest|Resultados, del más antiguo al más reciente
+Search opponent|Buscar rival
+avg only|solo media
+avg|media
+Input delay (f)|Retraso de entrada (f)
+WIN|VICTORIA
+LOSS|DERROTA
+DRAW|EMPATE
+Unknown|Desconocido
+unknown|desconocido
+result unknown|resultado desconocido
+result not recorded|resultado no registrado
+Signal|Señal
+Great|Buena
+Decent|Regular
+Rough|Mala
+Poor|Muy mala
+under 66 ms|menos de 66 ms
+66–133 ms|66–133 ms
+133–266 ms|133–266 ms
+266 ms and up|266 ms o más
+FPS drops|Caídas de FPS
+you|tú
+them|rival
+Duration|Duración
+fight|combate
+Avg ping|Ping medio
+Min – max|Mín – máx
+Jitter|Variación (jitter)
+Stalls|Parones
+stalled|parado
+Head-to-head · match {0}|Cara a cara · partida {0}
+Head-to-head · first match|Cara a cara · primera partida
+round-trip time from the game's own netcode|tiempo de ida y vuelta del propio netcode del juego
+Copy failed: use Download PNG.|No se pudo copiar: usa Descargar PNG.
+Copied, paste into Discord|Copiada, pégala en Discord
+Mode|Modo
+Format|Formato
+All|Todas
+Ranked|Ranked
+Quick|Rápida
+Player|Jugador
+unconfirmed|sin confirmar
+win streak|racha de victorias
+DP|PD
+Singles|Individual
+DP battles|Batallas PD
+Today|Hoy
+Yesterday|Ayer
+Giant dramatic finish|Final dramático gigante
+Dramatic finish|Final dramático
+opponent|rival
+unknown side|lado desconocido
+Desync|Desincronización
+Opponent lost|Rival perdido
+Timeout|Tiempo de espera agotado
+Network error|Error de red
+Disconnect|Desconexión
+Forfeit|Abandono
+No points|Sin puntos
+by KO|por KO
+double KO|doble KO
+by ring out|por fuera del ring
+on time|por tiempo
+by give up|por rendición
+draw|empate
+Knock out|KO
+Double knock out|Doble KO
+Ring out|Fuera del ring
+Time up|Tiempo agotado
+Give up|Rendición
+How to use it|Cómo se usa
+What every number means:|Qué significa cada dato:
+BT4 Ranked Details v{0} history page|Página de historial de BT4 Ranked Details v{0}
+data generated|datos generados
+unknown writer|escritor desconocido
+built with Svelte (MIT) and ported d3 code (ISC), licenses in|hecho con Svelte (MIT) y código portado de d3 (ISC), licencias en
+W-L|V-D
+Win rate|% de victorias
+Show these matches|Ver estas partidas
+Team compositions|Composiciones de equipo
+order ignored|sin importar el orden
+Characters in your DP teams|Personajes en tus equipos PD
+Click a character or team for its matches.|Pulsa un personaje o un equipo para ver sus partidas.
+Search a term|Buscar un término
+What every number and badge on these pages means. Hover a ⓘ on the other pages for the short version.|Qué significa cada dato y cada etiqueta de estas páginas. Pasa el ratón sobre una ⓘ en las otras páginas para la versión corta.
+no code|sin código
+{0} after the start|{0} tras el inicio
+{0} after the KO|{0} tras el KO
+HP|Vida
+stalls|parones
+points|puntos
+match|partida
+No incidents recorded.|No hay incidencias registradas.
+Your FPS|Tus FPS
+under 55 for {0} s|por debajo de 55 durante {0} s
+lowest 1-s avg {0}|media de 1 s más baja {0}
+sent by your game|enviado por tu juego
+Opponent FPS|FPS del rival
+reported by their game|según su juego
+about {0} times a second|unas {0} veces por segundo
+about once a second|más o menos una vez por segundo
+about every {0} s|más o menos cada {0} s
+Game speed|Velocidad del juego
+same speed as the opponent: nobody had to wait because of it|misma velocidad que el rival: nadie tuvo que esperar por eso
+your game ran faster: you waited for their inputs|tu juego iba más rápido: esperaste sus inputs
+their game ran faster: they waited for your inputs|su juego iba más rápido: esperó tus inputs
+The faster game uses up the other side’s inputs and has to pause; each pause can raise that player’s input delay by a frame. {0} fps (you) vs {1} fps (them), as each game reports it.|El juego más rápido gasta los inputs del otro lado y tiene que pararse; cada pausa puede subir un fotograma el retraso de entrada de ese jugador. {0} fps (tú) contra {1} fps (rival), según informa cada juego.
+Your frame drops|Tus caídas de FPS
+Opponent frame drops|Caídas de FPS del rival
+Catch-up|Recuperación
+{0} repeated inputs|{0} inputs repetidos
+none: input sent every frame|ninguna: input enviado en cada fotograma
+end-of-match reading ignored|lectura del final de la partida ignorada
+Opponent waited on you|El rival te esperó
+{0} after a load hitch on your PC|{0} tras un tirón de carga en tu PC
+none seen|ninguna vista
+inferred, a lower bound|deducido, un mínimo
+{0} s under {1}|{0} s por debajo de {1}
+lowest {0}|mínimo {0}
+≈ {0} f lost|≈ {0} f perdidos
+never under {0}|nunca por debajo de {0}
+stalls in them {0}|parones dentro {0}
+Connection: {0}|Conexión: {0}
+Connection|Conexión
+Average ping {0} ms (from {1} to {2}).|Ping medio {0} ms (de {1} a {2}).
+The game stalled once waiting for the opponent.|El juego se paró una vez esperando al rival.
+The game stalled {0} times waiting for the opponent.|El juego se paró {0} veces esperando al rival.
+{0} s in total.|{0} s en total.
+No stalls.|Sin parones.
+You won on damage: {0} vs {1}|Ganaste en daño: {0} contra {1}
+They won on damage: {1} vs {0}|El rival ganó en daño: {1} contra {0}
+Most of your damage came from {0} ({1} %).|La mayor parte de tu daño vino de {0} ({1} %).
+Damage dealt by each side over the whole match.|Daño hecho por cada lado en toda la partida.
+You won {0} of {1} wars|Ganaste {0} de {1} guerras
+Vanish and super counter wars: back-and-forth exchanges where each side answered the other.|Guerras de vanish y de super counter: intercambios en los que cada lado respondió al otro.
+Longest: {0} exchanges.|La más larga: {0} intercambios.
+No wars|Sin guerras
+No vanish or super counter war in this match.|No hubo guerras de vanish ni de super counter en esta partida.
+Match "{0}" is not in the data (any more).|La partida "{0}" no está (ya) en los datos.
+Back to the matches|Volver a las partidas
+All matches|Todas las partidas
+Older match (←)|Partida anterior (←)
+Older|Anterior
+Newer match (→)|Partida siguiente (→)
+Newer|Siguiente
+All matches vs {0}|Todas las partidas contra {0}
+match {0}|partida {0}
+first match vs them|primera partida contra este rival
+Their win streak before this match, from the game’s player card|Su racha de victorias antes de esta partida, según la tarjeta de jugador del juego
+their win streak|su racha de victorias
+no KO seen (quit / disconnect)|no se vio KO (abandono / desconexión)
+points say {0}|los puntos dicen {0}
+win|victoria
+loss|derrota
+pts|puntos
+Screenshot|Captura
+DP time-out score at the end of the battle: HP % × DP over the fighters still standing (bench included). The higher total wins if the timer runs out|Puntuación PD por tiempo al final del combate: % de vida × PD de los luchadores que siguen en pie (banquillo incluido). Gana el total más alto si se acaba el tiempo
+level, decided by {0}|empate, decidido por {0}
+time-out score|puntuación por tiempo
+level|empate
+you ahead by {0} %|tú por delante un {0} %
+they ahead by {0} %|el rival por delante un {0} %
+lead changed {0}×|el liderato cambió {0}×
+details|detalles
+The main points|Lo más importante
+See the connection|Ver la conexión
+See the combat|Ver el combate
+See it on the timeline|Verlo en la línea de tiempo
+Match sections|Secciones de la partida
+Summary|Resumen
+Combat|Combate
+Timeline|Línea de tiempo
+Jitter (sd)|Variación (jitter, sd)
+Input delay, match average|Retraso de entrada, media de la partida
+Avg input delay|Retraso de entrada medio
+Their input delay|Su retraso de entrada
+Lowest – highest; p95 = 95 % at or below|Mínimo – máximo; p95 = el 95 % igual o por debajo
+the game changed its delay window {0} times|el juego cambió su ventana de retraso {0} veces
+Delay range|Rango de retraso
+Packet loss|Pérdida de paquetes
+{0} of {1} packets resent|{0} de {1} paquetes reenviados
+{0} burst|{0} ráfaga
+{0} bursts|{0} ráfagas
+from the opponent|del rival
+RTT samples|Muestras de RTT
+Input delay, FPS, packet loss and more in Connection|Retraso de entrada, FPS, pérdida de paquetes y más en Conexión
+HP, latency and FPS timeline|Línea de tiempo de vida, latencia y FPS
+Loading timeline…|Cargando la línea de tiempo…
+The timeline file could not be loaded (missing or unreadable):|No se pudo cargar el archivo de la línea de tiempo (falta o no se puede leer):
+Match details|Detalles de la partida
+{0}, the better value highlighted|{0}, el mejor valor resaltado
+Character|Personaje
+Team|Equipo
+History|Historial
+Clear this filter|Quitar este filtro
+Newest first|Más recientes primero
+Show every column or the short list|Ver todas las columnas o la lista corta
+Short list|Lista corta
+All columns|Todas las columnas
+All-time totals|Totales de siempre
+No matches for the current filter.|No hay partidas con este filtro.
+click a row for the match page · click a column title to sort|pulsa una fila para ver la partida · pulsa el título de una columna para ordenar
+No match with combat stats yet (recorded from v1.6.0 on).|Aún no hay partidas con estadísticas de combate (se registran desde v1.6.0).
+Matches with stats|Partidas con estadísticas
+Damage dealt / taken per match|Daño hecho / recibido por partida
+Your habits|Tus costumbres
+what you use per match, against what your opponents use against you|lo que usas por partida, contra lo que tus rivales usan contra ti
+No matches vs "{0}" in the data.|No hay partidas contra "{0}" en los datos.
+All opponents|Todos los rivales
+also seen as {0}|también visto como {0}
+Seen {0}|Visto {0}
+First {0} · last {1}|Primera vez {0} · última {1}
+win rate|% de victorias
+Avg jitter|Variación media (jitter)
+Their win streak on the game's player card before your newest match with it ({0})|Su racha de victorias en la tarjeta de jugador antes de tu partida más reciente que la tiene ({0})
+Their win streak|Su racha de victorias
+Results|Resultados
+oldest to newest, click a square for the match|del más antiguo al más reciente, pulsa un cuadro para ver la partida
+{0} streak|racha de {0}
+Last result|Último resultado
+Last {0}|Últimas {0}
+Not counted in W-L|No cuenta en V-D
+{0} unknown|{0} desconocidos
+You vs them, all matches|Tú contra el rival, todas las partidas
+{0} with combat stats · totals, longest, averages|{0} con estadísticas de combate · totales, máximos, medias
+Their habits|Sus costumbres
+what they use per match against you, and what happens to it|lo que usa por partida contra ti y qué pasa con ello
+Ping history|Historial de ping
+avg per match, bar = min – max|media por partida, barra = mín – máx
+Average ping per match|Ping medio por partida
+They used|Usó
+You played|Jugaste con
+Show my matches with {0}|Ver mis partidas con {0}
+newest first|las más recientes primero
+Sort|Ordenar
+Sort by|Ordenar por
+Last seen|Última vez
+Most played|Más partidas
+Best record|Mejor récord
+Worst record|Peor récord
+Worst ping|Peor ping
+No opponents for the current filter.|No hay rivales con este filtro.
+Last results|Últimos resultados
+Plays {0}|Suele usar {0}
+Click an opponent for your history against them, their characters, their ping in every match and how they play.|Pulsa un rival para ver tu historial contra él, sus personajes, su ping en cada partida y cómo juega.
+Result|Resultado
+Your result|Tu resultado
+Date / time|Fecha / hora
+Points|Puntos
+Ping|Ping
+Average round trip of the match (colour = signal grade)|Ida y vuelta media de la partida (color = calidad de la señal)
+Online mode: Ranked, Quick or Player match|Modo online: Ranked, partida rápida o de jugador
+W/L|V/D
+Avg ms|ms medio
+Min|Mín
+Max|Máx
+Jitter: standard deviation of the round trip|Variación (jitter): desviación típica de la ida y vuelta
+Dur.|Dur.
+Avg delay (f)|Retraso medio (f)
+Match average, frames|Media de la partida, fotogramas
+after ko|tras el KO
+pre fight|antes del combate
+setup|preparación
+intro|intro
+start fence|inicio
+result|resultado
+closing|cierre
+other|otro
+mode letter R|mode letter R
+mode letter Q|mode letter Rá
+mode letter P|mode letter J
+won by|ganador:
+unresolved (no hit within 1.5 s)|sin resolver (ningún golpe en 1.5 s)
+unresolved|sin resolver
+(last vanish, no hit)|(último vanish, sin golpe)
+vanish war|guerra de vanish
+super counter war|guerra de super counter
+mixed war|guerra mixta
+started by you|iniciada por ti
+started by opponent|iniciada por el rival
+started by ?|iniciada por ?
+Start|Inicio
+Switch|Cambio
+Transformation|Transformación
+Super|Super
+Ultimate|Ultimate
+Vanish|Vanish
+Super counter|Super counter
+Sparking!|Sparking!
+Revenge counter|Revenge counter
+Guard break|Rotura de guardia
+KO|KO
+Clash won|Choque ganado
+Vanish war|Guerra de vanish
+Super counter war|Guerra de super counter
+Mixed war|Guerra mixta
+Revenge counter caught (super perception)|Revenge counter atrapado (superpercepción)
+Special finish|Final especial
+Vanishing attack|Vanishing attack
+Vanishing assault|Vanishing assault
+Markers|Marcadores
+Wars|Guerras
+Switch / KO|Cambio / KO
+Latency|Latencia
+Jitter (2 s min–max)|Variación (jitter, mín–máx en 2 s)
+Grade bands|Franjas de calidad
+Input delay (f, right axis)|Retraso de entrada (f, eje derecho)
+Packet loss (resent)|Pérdida de paquetes (reenviados)
+Every second|Cada segundo
+Realtime (slowest frame per 0.25 s)|Tiempo real (fotograma más lento cada 0.25 s)
+Opponent (reported)|Rival (reportado)
+Their drops (1-s avg under 58.5)|Sus caídas (media de 1 s por debajo de 58.5)
+Loading|Carga
+Time-out score|Puntuación por tiempo
+Who wins if the time ran out (your share)|Quién gana si se agota el tiempo (tu parte)
+you: realtime|tú: tiempo real
+you: realtime only for this match|tú: solo tiempo real en esta partida
+you: every second|tú: cada segundo
+{0} ms frame loading {1}|fotograma de {0} ms al cargar a {1}
+{0} ms frame loading a character|fotograma de {0} ms al cargar un personaje
+(their switch)|(su cambio)
+their game waited ≥ {0} f for your inputs|su juego esperó ≥ {0} f a tus entradas
+your PC had a {0}|tu PC tuvo un {0}
+after one long frame on your PC|tras un fotograma largo en tu PC
+your inputs arrived late (no long frame on your PC: network or their side)|tus entradas llegaron tarde (sin fotograma largo en tu PC: la red o su lado)
+inferred|deducido
+Stall at {0} · {1} s|Parón en {0} · {1} s
+Stall at {0} · open|Parón en {0} · abierto
+Your delay {0} f|Tu retraso {0} f
+Delay {0} f|Retraso {0} f
+Their delay not measured|Su retraso: sin medir
+Their delay {0} f|Su retraso {0} f
+1 packet resent (lost or late)|1 paquete reenviado (perdido o tardío)
+{0} packets resent (lost or late)|{0} paquetes reenviados (perdidos o tardíos)
+You {0} fps (slowest frame {1} ms)|Tú {0} fps (fotograma más lento {1} ms)
+You {0} fps|Tú {0} fps
+You {0} fps (this second)|Tú {0} fps (este segundo)
+You {0} fps (reported)|Tú {0} fps (reportado)
+loading (not a drop)|carga (no es una caída)
+Opponent {0} fps (reported)|Rival {0} fps (reportado)
+their frame drop (lowest {0})|su caída de FPS (mínimo {0})
+catch-up: input every {0} f|recuperación: una entrada cada {0} f
+micro-wait (not a stall)|microespera (no es un parón)
+micro-wait: 1 frame (not a stall)|microespera: 1 fotograma (no es un parón)
+micro-wait: {0} frames (not a stall)|microespera: {0} fotogramas (no es un parón)
+load hitch: {0}|tirón de carga: {0}
+Time-out score {0} – {1} (level)|Puntuación por tiempo {0} – {1} (igualados)
+Time-out score {0} – {1} (you ahead by {2} %)|Puntuación por tiempo {0} – {1} (vas {2} % por delante)
+Time-out score {0} – {1} (they lead by {2} %)|Puntuación por tiempo {0} – {1} (el rival va {2} % por delante)
+All lines hidden: click a chip above to show one|Todas las líneas ocultas: pulsa un chip de arriba para mostrar una
+1 stall|1 parón
+{0} s stalled|{0} s en parón
+Ping avg {0} ms · p95 {1} ms · jitter ±{2} ms|Ping medio {0} ms · p95 {1} ms · jitter ±{2} ms
+Input delay avg {0} f|Retraso de entrada medio {0} f
+{0} changes|{0} cambios
+Timeline series: click to show or hide|Series de la línea de tiempo: pulsa para mostrar u ocultar
+Show or fold the {0} chart|Mostrar o plegar el gráfico de {0}
+This timeline has no HP or ping samples.|Esta línea de tiempo no tiene muestras de vida ni de ping.
+HP of both sides over time|Vida de ambos lados a lo largo del tiempo
+HP (both sides)|Vida (ambos lados)
+{0} KO at {1}|{0} KO en {1}
+Ping over time|Ping a lo largo del tiempo
+Ping (round trip)|Ping (ida y vuelta)
+background = the game's signal grades|fondo = calidades de señal del juego
+step line = input delay|línea escalonada = retraso de entrada
+step lines = input delay (theirs dashed)|líneas escalonadas = retraso de entrada (el suyo discontinuo)
+dashed steps = their input delay|escalones discontinuos = su retraso de entrada
+pink ticks = resent packets|marcas rosas = paquetes reenviados
+input delay (frames)|retraso de entrada (fotogramas)
+their input delay (frames, from their packets)|su retraso de entrada (fotogramas, según sus paquetes)
+FPS over time: you and the opponent|FPS a lo largo del tiempo: tú y el rival
+FPS: you vs opponent|FPS: tú vs rival
+stretched near 60|ampliado cerca de 60
+Time-out score over time: who would win if the time ran out|Puntuación por tiempo a lo largo de la partida: quién ganaría si se agotara el tiempo
+Time-out score: your share (up = you would win on time, down = they would)|Puntuación por tiempo: tu parte (arriba = ganarías por tiempo, abajo = ganaría el rival)
+stall|parón
+scroll →|desliza →
+Red = your game waited for the opponent (not counted as your drops).|Rojo = tu juego esperó al rival (no cuenta como caídas tuyas).
+Light red = a short wait (&lt; 0.1 s).|Rojo claro = una espera corta (&lt; 0.1 s).
+Dark ticks = one long frame on your PC at a character load ({0}×, {1} ms at most); not an FPS drop, but the other side may have had to wait for it.|Marcas oscuras = un fotograma largo en tu PC al cargar un personaje ({0}×, {1} ms como máximo); no es una caída de FPS, pero puede que el otro lado tuviera que esperarlo.
+Orange shading = their FPS dropped below 58.5.|Sombreado naranja = sus FPS bajaron de 58.5.
+Grey = loading, not a drop.|Gris = carga, no es una caída.
+per match, over 1 match|por partida, en 1 partida
+per match, over {0} matches|por partida, en {0} partidas
+What happened to it|Cómo acabó
+none|ninguno
+{0}% through|{0}% conectados
+{0}% blocked|{0}% bloqueados
+{0}% vanished|{0}% evitados con vanish
+landed|conectado
+blocked|bloqueado
+blocked (guarded)|bloqueado (guardia)
+vanished|evitado con vanish
+stopped|detenido
+stopped (countered, perceived, evaded, interrupted)|detenido (contraatacado, percibido, evadido, interrumpido)
+missed|fallado
+matches since 1.8.1 only|solo partidas desde la 1.8.1
+No combat counters in this record.|Este registro no tiene contadores de combate.
+on the field at the end|en el campo al final
+show my matches with this character|ver mis partidas con este personaje
+DP battle|Batalla PD
+limit {0} DP|límite {0} PD
+{0} vs {1} DP|{0} vs {1} PD
+Micro-wait (1 frame)|Microespera (1 fotograma)
+Micro-wait (1–{0} frames)|Microespera (1–{0} fotogramas)
+Micro-wait (&lt; 0.1 s)|Microespera (&lt; 0.1 s)
+Input delay {0}|Retraso de entrada {0}
+FPS {0}|FPS {0}
+under 55: {0} s|bajo 55: {0} s
+{0} of {1} resent|{0} de {1} reenviados
+{0} ranked|{0} en ranked
+Rush chains|Rush chains
+Skills|Habilidades
+Throws|Agarres
+Flying kicks|Patadas voladoras
+Sweeps|Barridos
+Chases|Persecuciones
+Vanish attacks|Vanish attacks
+Vanish assaults|Vanish assaults
+Vanishes|Vanishes
+Super counters|Super counters
+Revenge counters|Revenge counters
+Perceptions|Percepciones
+Z-bursts|Z-bursts
+Dragon dashes|Dragon dashes
+Charged sweeps|Barridos cargados
+Chases (Dragon Homing)|Persecuciones (Dragon Homing)
+Vanishing attacks|Vanishing attacks
+Vanishing assaults|Vanishing assaults
+Damage|Daño
+Damage dealt|Daño infligido
+Healed|Vida curada
+Heals|Curaciones
+Rush hits|Golpes de rush
+Smash hits|Golpes de smash
+Other melee hits|Otros golpes cuerpo a cuerpo
+Ki blast hits|Impactos de ki blast
+Blast skill hits|Impactos de blast skill
+Ultimate hits|Impactos de ultimate
+Impact hits|Golpes de choque (impact)
+Attacks|Ataques
+Longest rush chain|Rush chain más larga
+Smash attacks|Smash attacks
+Blast skills|Blast skills
+Combos|Combos
+Combos (2+ hits)|Combos (2+ golpes)
+Longest combo|Combo más largo
+Average combo|Combo medio
+Biggest combo damage|Mayor daño en un combo
+Combos with a vanishing attack|Combos con un vanishing attack
+Combos with dragon homing|Combos con dragon homing
+Movement &amp; defence|Movimiento y defensa
+Air time|Tiempo en el aire
+Guard time (% of match)|Tiempo en guardia (% de la partida)
+Guard time|Tiempo en guardia
+Guard activations|Activaciones de guardia
+Hits blocked|Golpes bloqueados
+Guard breaks suffered|Roturas de guardia sufridas
+High-speed evasions|Evasiones a alta velocidad
+Counters &amp; wars|Counters y guerras
+Avg hits before super counter|Golpes de media antes del super counter
+Earliest super counter (hits)|Super counter más temprano (golpes)
+SC in exchanges (not in avg)|SC en intercambios (fuera de la media)
+Vanish wars|Guerras de vanish
+Vanish wars won|Guerras de vanish ganadas
+Vanish wars lost (failed vanish, hit out of it)|Guerras de vanish perdidas (vanish fallido, golpeado)
+Super counter wars|Guerras de super counter
+Super counter wars won|Guerras de super counter ganadas
+Super counter wars lost|Guerras de super counter perdidas
+Mixed wars|Guerras mixtas
+Mixed wars won|Guerras mixtas ganadas
+Mixed wars lost|Guerras mixtas perdidas
+Longest war (links)|Guerra más larga (enlaces)
+Clashes|Choques
+Clashes won|Choques ganados
+Perception attempts|Intentos de percepción
+Perception successes|Percepciones con éxito
+Super perceptions|Superpercepciones
+Revenge counters caught by super perception|Revenge counters atrapados con superpercepción
+Revenge counters caught by perception|Revenge counters atrapados con percepción
+Own revenge counters caught (super perception)|Revenge counters propios atrapados (superpercepción)
+Own revenge counters caught (perception)|Revenge counters propios atrapados (percepción)
+Z-burst dashes|Z-burst dashes
+Dragon homing (follow-ups)|Dragon homing (seguimientos)
+Vanishing attacks (chase)|Vanishing attacks (persecución)
+Started|Iniciados
+Landed|Conectados
+Damage dealt with them|Daño infligido con ellos
+Chains (2+ in one combo)|Cadenas (2+ en un combo)
+Longest chain|Cadena más larga
+Guarded by the other side|Bloqueados por el otro lado
+Countered by the other side|Contraatacados por el otro lado
+Vanished by the other side|Evitados con vanish por el otro lado
+Evaded (high-speed evasion)|Evadidos (evasión a alta velocidad)
+Perceived by the other side|Percibidos por el otro lado
+Hit out of it|Interrumpidos con un golpe
+No contact|Sin contacto
+Turned into a war (their vanish / counter)|Convertidos en guerra (su vanish / counter)
+Won a war with it (deciding hit)|Guerra ganada con ellos (golpe decisivo)
+Vanishing attacks + assaults (before 1.9)|Vanishing attacks + assaults (antes de la 1.9)
+Wild Sense|Wild Sense
+Wild Sense triggered|Wild Sense activado
+Wild Sense counter landed|Contraataque de Wild Sense conectado
+Wild Sense hit %|% de acierto de Wild Sense
+Wild Sense beaten (hit through it)|Wild Sense superado (golpeado a través de él)
+Flying kicks &amp; sweeps|Patadas voladoras y barridos
+Flying kicks landed %|% de patadas voladoras conectadas
+Flying kicks blocked|Patadas voladoras bloqueadas
+Flying kicks blocked %|% de patadas voladoras bloqueadas
+Flying kicks vanished|Patadas voladoras evitadas con vanish
+Flying kicks vanished %|% de patadas voladoras evitadas con vanish
+Sweeps landed %|% de barridos conectados
+Sweeps blocked|Barridos bloqueados
+Sweeps blocked %|% de barridos bloqueados
+Sweeps vanished|Barridos evitados con vanish
+Sweeps vanished %|% de barridos evitados con vanish
+Charged sweeps blocked|Barridos cargados bloqueados
+Charged sweeps blocked %|% de barridos cargados bloqueados
+Charged sweeps vanished|Barridos cargados evitados con vanish
+Dragon homing chases|Persecuciones de dragon homing
+Chases (after a knock-away)|Persecuciones (tras mandar lejos al rival)
+Chase hit %|% de acierto en persecución
+Vanished (high-speed evasion out of the chase)|Esquivadas (evasión a alta velocidad en la persecución)
+Vanished (teleport)|Evitadas con vanish (teletransporte)
+Guarded|Bloqueadas
+Countered|Contraatacadas
+Resources|Recursos
+Max Power activations|Activaciones de Sparking!
+Time in Max Power|Tiempo en Sparking!
+Transformations|Transformaciones
+Character switches|Cambios de personaje
+Skill count spent|Contador de habilidad gastado
+Ki charge time|Tiempo de carga de ki
+Keyboard shortcuts|Atajos de teclado
+Data from {0}|Datos del {0}
+points not recorded|puntos no registrados
+Data|Datos
+no change (likely voided)|sin cambios (probablemente anulada)
+no change seen (rank window cut short by the next match)|sin cambios vistos (la siguiente partida cortó la lectura del rango)
+Both|Ambos
+Older / newer match (match page)|Partida anterior / siguiente (en una partida)
+Match tabs: summary, combat, connection, timeline|Pestañas de la partida: resumen, combate, conexión, línea de tiempo
+Back to the list|Volver a la lista
+Show or hide this help|Mostrar u ocultar esta ayuda
+{0} % of all damage was yours|el {0} % de todo el daño fue tuyo
+Where you were ahead|Dónde fuiste mejor
+Where you were behind|Dónde fuiste peor
+Copy the picture (paste it into Discord)|Copiar la imagen (pégala en Discord)
+Preview and download the PNG|Ver y descargar el PNG
+{0} RTT samples|{0} muestras de RTT
+How much the round trip swung (standard deviation); low means a steady connection.|Cuánto varió el ping (desviación típica); bajo significa una conexión estable.
+{0} s in total|{0} s en total
+Times the game froze waiting for the opponent's input|Veces que el juego se congeló esperando la entrada del rival
+Network|Red
+Input delay|Retraso de entrada
+Performance|Rendimiento
+Key {0}|Tecla {0}
+worth a look|revisar
+fine|bien
+the longer, solid bar did better|la barra más larga y sólida fue mejor
+Help|Ayuda
+per match|por partida
+streak {0}|racha {0}
+finish|final
+over {0} matches|en {0} partidas
+One ranked match with points so far: the chart starts with the second.|Por ahora hay una partida ranked con puntos: el gráfico empieza con la segunda.
+No ranked match with points in this filter (recorded from v1.7.0 on).|No hay partidas ranked con puntos en este filtro (se registran desde la v1.7.0).
+Win rate per week|% de victorias por semana
+wins and losses only · dashed line = 50 %|solo victorias y derrotas · línea discontinua = 50 %
+Week of {0}|Semana del {0}
+Layers|Capas
+{0} of {1} shown|{0} de {1} visibles
+Marker symbols|Símbolos de los marcadores
+How to read it|Cómo leerlo
+no FPS drops|sin caídas de FPS
+axis from 50|eje desde 50
+matches|partidas
+few matches|pocas partidas
+{0} damage per match|{0} de daño por partida
+Last played {0}|Jugado por última vez: {0}
+Topics|Temas
+Results and ranked points|Resultados y puntos de ranked
+Pages and buttons|Pantallas y botones
+Matches that ended badly|Partidas que terminaron mal
+Against|Contra
+Open the match|Abrir la partida
+no match recorded (it ended before the fight)|no se registró partida (terminó antes del combate)
+When|Cuándo
+you – them|Tú – rival
+Game code and raw record|Código del juego y registro completo
+Code|Código
+Matches that ended abnormally: quit, disconnect, network error or forfeit|Partidas que terminaron de forma anómala: abandono, desconexión, error de red o rendición
+Ended badly|Terminadas mal
+{0} new|{0} nuevas
+click a row for its summary · click a column title to sort|haz clic en una fila para ver su resumen · haz clic en el título de una columna para ordenar
+All your totals are in You|Todos tus totales están en Tú
+Match summary|Resumen de la partida
+Open the full match|Abrir la partida completa
+Close (Esc)|Cerrar (Esc)
+↑ / ↓ the next match in the list · Esc closes|↑ / ↓ la siguiente partida de la lista · Esc cierra
+Your progress|Tu progreso
+over {0} ranked matches|en {0} partidas ranked
+The two games went out of sync|Los dos juegos se desincronizaron
+The opponent left|El rival se fue
+The connection timed out|Se agotó el tiempo de la conexión
+You were disconnected|Te desconectaste
+Someone gave up|Alguien se rindió
+Ranked points did not change|Los puntos de ranked no cambiaron
+during the intro|durante la intro
+during the fight|durante el combate
+after the KO|tras el KO
+on the result screen|en la pantalla de resultados
+Last match: {0}|Última partida: {0}
+first: {0}|primera: {0}
+Opponent sections|Secciones del rival
+Ranked points vs them|Puntos de ranked contra él
+no points recorded|sin puntos registrados
+their win streak {0}|su racha de victorias {0}
+Latest matches|Últimas partidas
+All {0} matches|Las {0} partidas
+lowest and highest of all matches|el más bajo y el más alto de todas las partidas
+match averages|medias por partida
+Damage per match|Daño por partida
+dealt / taken, over {0} matches with stats|hecho / recibido, en {0} partidas con estadísticas
+Vanishing attacks + assaults|Vanishing attacks + assaults
+Technical details|Detalles técnicos
+Matches per page|Partidas por página
+Per page|Por página
+Previous|Anterior
+Next|Siguiente
+Quick view: the summary beside the list|Vista rápida: el resumen al lado de la lista
+Quick view|Vista rápida
+Opponent page|Ver rival
+click a row to open the match · ▣ quick view beside the list · click a column title to sort|haz clic en una fila para abrir la partida · ▣ vista rápida al lado de la lista · haz clic en el título de una columna para ordenar
+click a row to open the match · click a column title to sort|haz clic en una fila para abrir la partida · haz clic en el título de una columna para ordenar
+No Account ID recorded|Sin Account ID registrado
+Streak {0}|Racha {0}
+Finish|Final
+Hide the quick view|Ocultar la vista rápida
+Show the quick view under this row|Mostrar la vista rápida debajo de esta fila
+The opponent's BT4 Account|El perfil de Steam del rival (se abre en el navegador)
+The summary unfolds under the row|El resumen se despliega debajo de la fila
+Full view|Vista completa
+The match page with every tab|La página de la partida con todas sus pestañas
+Open|Abrir
+Click a row to open the match · ▾ unfolds a quick view · click a column title to sort|Haz clic en una fila para abrir la partida · ▾ despliega una vista rápida · haz clic en el título de una columna para ordenar
+↑ / ↓ next match · Esc closes|↑ / ↓ partida siguiente · Esc cierra
+over {0} match|en {0} partida
+First: {0}|Primera: {0}
+See the details|Ver detalles
+Record deleted|Registro borrado
+Undo|Deshacer
+Delete|Borrar
+Delete this record: it looks like a fight that never happened (no result, a few seconds long)|Borrar este registro: parece una pelea que nunca existió (sin resultado y de pocos segundos)
+This record looks like a fight that never happened: no result and only a few seconds long.|Este registro parece una pelea que nunca existió: sin resultado y de solo unos segundos.
+Delete this record|Borrar este registro
+{0} deleted record|{0} registro borrado
+{0} deleted records|{0} registros borrados
+Restore all|Restaurar todos
+</template>
+<template id="legend-src-es">
+<section class="gsec" data-g="conn"><h2>Conexión</h2>
+<dl class="legend">
+<dt>Media ms</dt><dd><p>Tiempo medio de ida y vuelta hasta el rival, medido por el propio netcode del juego (tus entradas le llegan en más o menos la mitad de eso, más el retraso de entrada del juego).</p></dd>
+<dt>Mín / Máx</dt><dd><p>La mejor y la peor ida y vuelta de la partida.</p></dd>
+<dt>Variación (jitter)</dt><dd><p>Cuánto osciló la ida y vuelta (desviación típica); bajo significa una conexión estable.</p></dd>
+<dt>Retraso medio (f)</dt><dd><p>Retraso de entrada online en fotogramas (1 f = 1/60 s = 16.7 ms): cuánto retiene el netcode tu pulsación antes de que ocurra en ambas pantallas.</p><details class="gmore"><summary>Más</summary><p>El juego lo ajusta durante la partida (más o menos la mitad del ping más un margen de seguridad, +1 tras un parón), así que es el lag que notas de verdad. La lista muestra la media de la partida; la página de la partida añade mín – máx, p95 y cuántas veces cambió, y la línea de tiempo lo dibuja como una línea escalonada, junto al retraso de entrada del propio rival (naranja discontinuo, leído de las cabeceras de sus paquetes; un corte = sin medir, p. ej. justo después de un parón).</p><details class="tech"><summary>Detalles técnicos</summary><p>Se rellena cuando la medición de retraso del mod está activa (<code>delay_scan = 1</code>, por defecto) y pudo leer el valor en esa partida.</p></details></details></dd>
+<dt>Parones</dt><dd><p>Veces que el juego se congeló esperando la entrada del rival (los segundos de parón, entre paréntesis).</p></dd>
+<dt>Pérdida de paquetes</dt><dd><p>La proporción de paquetes del rival que solo llegaron mediante un <b>reenvío</b>, porque la primera copia se perdió o llegó tarde por el camino.</p><details class="gmore"><summary>Más</summary><p>El juego lo envía todo por Steam sin garantía de entrega y reenvía él mismo los paquetes que faltan; el mod lee el propio contador del juego de esos reenvíos (el mismo número que baja un escalón la calidad de señal del juego al 5 %), así que esto es <i>aproximadamente</i> la pérdida de paquetes, no un recuento exacto. Solo la dirección rival → tú: tus paquetes perdidos de camino a él se ven en su lado. Página de la partida: una ficha (% · reenviados de los paquetes · ráfagas) y marcas rosas al pie del gráfico de ping, una por ráfaga (más alta = más paquetes; pasa el ratón para ver el recuento). Un reenvío cuesta más o menos una ida y vuelta, así que las ráfagas suelen coincidir con parones.</p><details class="tech"><summary>Detalles técnicos</summary><p>Desde la v1.8.0 (partidas online).</p></details></details></dd>
+<dt>Bandas de color</dt><dd><p>Las calidades de señal del propio juego: <span class="c1">&lt;66 ms verde (Buena)</span>, <span class="c2">66-133 amarillo (Regular)</span>, <span class="c3">133-266 naranja (Mala)</span>, <span class="c4">266-532 y &gt;532 ms rojo (Muy mala)</span>.</p><details class="gmore"><summary>Más</summary><p>Las filas se tiñen con la calidad de su media; la página de la partida y la imagen para compartir nombran la calidad (Señal).</p></details></dd>
+<dt>Ping por partida</dt><dd><p>El gráfico de ping de la página de un rival (pestaña Conexión): tu ping medio en cada partida contra ese rival, de la más antigua a la más reciente, sobre los colores de calidad, con una barra del ping más bajo al más alto de la partida (pasa el ratón por un punto para ver su fecha y los ms).</p></dd>
+</dl></section>
+<section class="gsec" data-g="rank"><h2>Resultados y puntos de ranked</h2>
+<dl class="legend">
+<dt>V/D</dt><dd><p>Resultado desde tu lado: <b class="rw">V</b> victoria, <b class="rl">D</b> derrota, <b class="rd">E</b> empate, <b class="ru">?</b> desconocido (la partida terminó sin que se viera un KO, p. ej. por una desconexión, o se registró antes de la v1.1.0).</p><details class="gmore"><summary>Más</summary><p>El porcentaje de victorias solo cuenta victorias y derrotas; pasa el ratón por un resultado para ver cómo terminó la partida.</p></details></dd>
+<dt>H2H</dt><dd><p>Tu historial cara a cara contra ese rival tras esa partida (V-D, o V-D-E con empates), mostrado a partir del segundo enfrentamiento.</p><details class="gmore"><summary>Más</summary><p>Se cuenta sobre todas las partidas, sea cual sea el filtro.</p></details></dd>
+<dt>Puntos</dt><dd><p>Puntos de Ranked ganados (<b class="rw">+N</b>) o perdidos (<b class="rl">-N</b>) en esa partida, desde la v1.7.0 (partidas antiguas y partidas en las que no se vio ningún cambio: –).</p><details class="gmore"><summary>Más</summary><p>"(sin confirmar)" = registrado antes de comprobar el origen del valor con el número que mostraba el juego.</p><details class="tech"><summary>Detalles técnicos</summary><p>El mod lee los propios valores de rango del juego antes de la partida y después del resultado (solo lectura, <code>rank_lookup = 1</code>); pasa el ratón para ver el rango y los puntos antes → después.</p></details></details></dd>
+<dt>Rango</dt><dd><p>Cabecera de la página de partidas: tus puntos totales y tu rango actuales en Individual (Singles) y PD (el nombre de rango del juego, p. ej. <i>Individual 30,326 · Z</i>), más tu racha de victorias actual en Ranked y la más larga (mejor), leídas tras tu partida registrada más reciente; – hasta que una partida lo haya registrado.</p><details class="gmore"><summary>Más</summary><p>La página de la partida muestra los puntos de esa partida bajo el resultado (al pasar el ratón: rango y puntos antes → después y la racha de victorias antes → después).</p></details></dd>
+<dt>Racha de victorias</dt><dd><p>La tuya: de las propias estadísticas de Ranked del juego (cabecera, y antes → después en la página de la partida).</p><details class="gmore"><summary>Más</summary><details class="tech"><summary>Detalles técnicos</summary><p>La del rival (<span class="osk">87V</span> junto a su nombre, "su racha de victorias" en la página de la partida, una ficha en la página del rival): leída de la tarjeta de jugador del juego antes del combate (v1.8.0, aún en verificación: el mod lee los textos de información del jugador de la pantalla de enfrentamiento / resultado).</p></details></details></dd>
+<dt>Final especial</dt><dd><p><span class="fin">★</span> junto al resultado: la partida (o una ronda de PD) terminó con un <b>final dramático</b> de un ultimate (p. ej. Evil Containment Wave de Master Roshi, Angry Kamehameha de Goku, Dragon Fist, Spirit Bomb; Gigante = contra un gigante), leído del propio tipo de victoria del juego; la página de la partida nombra el ultimate y quién lo hizo, y la imagen para compartir dice "final dramático".</p></dd>
+<dt>DC</dt><dd><p>Junto al resultado: el combate terminó sin KO / tiempo agotado (alguien abandonó o se desconectó).</p><details class="gmore"><summary>Más</summary><p>El resultado se queda en <b class="ru">?</b>; si el juego aun así movió tus puntos de Ranked, la columna Puntos los muestra y la página de la partida dice qué implican esos puntos (victoria / derrota).</p></details></dd>
+<dt>Racha, forma</dt><dd><p>En las páginas de rivales: cada resultado del más antiguo al más reciente (haz clic en un cuadro para ir a la partida), la racha actual (los resultados desconocidos se omiten) y la forma en las últimas 5 / 10.</p></dd>
+</dl></section>
+<section class="gsec" data-g="combat"><h2>Combate</h2>
+<dl class="legend">
+<dt>Detalles de la partida</dt><dd><p>Comparación lado a lado Tú | Rival (daño, ataques, combos, guardia, counters &amp; guerras, Sparking! ...).</p><details class="gmore"><summary>Más</summary><p>Se resalta el mejor valor (el más alto, o el más bajo en roturas de guardia sufridas y golpes antes de un super counter); las filas neutras no.</p></details></dd>
+<dt>Counters &amp; guerras</dt><dd><p><b>Super counter</b> = el counter que inicias mientras te golpean; <b>vanish</b> = la esquiva con teletransporte.</p><details class="gmore"><summary>Más</summary><p>Una <b>guerra</b> son 2 o más de ellos de ida y vuelta (como mucho a 0.9 s entre sí): una <i>guerra de vanish</i> (vanish war; solo vanishes), una <i>guerra de super counter</i> (super counter war; solo super counters) o una <i>guerra mixta</i>. <b>Guerra más larga</b> = más eslabones en una guerra. <b>Choques</b>: ambos lados se lanzan el uno contra el otro; el juego decide el ganador. Las percepciones, los revenge counters y las evasiones a alta velocidad se cuentan por inicio.</p><details class="tech"><summary>Detalles técnicos</summary><p>Desde la v1.6.0 (las partidas antiguas muestran – : sus recuentos de vanish mezclaban super counters y vanishes). La gana el lado cuyo golpe conecta a continuación en 1.5 s; si no, queda sin resolver. <b>Superpercepción</b> (v1.8.0): la percepción a tiempo que atrapa un golpe (el juego informa del golpe como superpercibido); <b>revenge counters atrapados por superpercepción</b> = el revenge counter del otro lado castigado así (la fila de la víctima: <i>revenge counters propios atrapados</i>).</p></details></details></dd>
+<dt>Vanishing attacks &amp; assaults</dt><dd><p>Por lado, con los nombres propios del juego.</p><details class="gmore"><summary>Más</summary><p>Un <b>vanishing attack</b> (Y / Triángulo tras mandar lejos al rival; Arriba / Abajo / Izquierda / Derecha con el stick) es la <i>persecución</i> con teletransporte tras un lanzamiento (smash, remate de rush, contraataque); un combo solo permite unos pocos. Un <b>vanishing assault</b> (A + X / Cruz + Cuadrado, cuesta ki) es el ataque con teletransporte desde neutral, la guardia o un rush: detrás del rival si está cerca, delante de él si está más lejos; a larga distancia solo te coloca delante de él, así que aparece como <b>sin contacto</b>. <b>Iniciados</b> cuenta cada intento, también los encadenados (la 2.ª, 3.ª persecución en un combo); <b>conectados</b> = su golpe conectó; si no, el otro lado lo bloqueó, lo contrarrestó (super counter o revenge counter), hizo vanish, lo esquivó con una evasión a alta velocidad o lo percibió, el atacante fue <b>interrumpido por un golpe</b> antes, o quedó <b>sin contacto</b>. <b>Cadenas</b> = combos con 2 o más. <b>Acabó en guerra</b> = el vanish / super counter del otro lado que lo detuvo abrió una guerra; <b>ganó una guerra con él</b> = su golpe decidió una guerra. Daño = la vida que perdió el otro lado durante él (Entrenamiento no muestra nada: allí la barra de vida no se mueve).</p><details class="tech"><summary>Detalles técnicos</summary><p>Desde la v1.8.0. Pasa el ratón por un marcador de la línea de tiempo para ver el resultado y el id de acción del juego (<code>actVAA</code>… = vanishing attack, <code>actVAS</code>… = vanishing assault; las claves del ini <code>vanishing_attack_actions</code> / <code>vanishing_assault_actions</code> fijan qué ids cuentan). Los registros anteriores a 1.9 muestran un solo número para ambos.</p></details></details></dd>
+<dt>Vida recuperada</dt><dd><p>Vida que recuperó un personaje mientras seguía en el campo (regeneración, habilidades de curación); los cambios de vida en los 6 s posteriores a un cambio o una transformación no se cuentan.</p><details class="gmore"><summary>Más</summary><p>Curaciones = momentos de curación separados (con más de 1 s entre sí).</p><details class="tech"><summary>Detalles técnicos</summary><p>Nuevo en 1.9.1.</p></details></details></dd>
+<dt>Daño hecho con</dt><dd><p>Daño por tipo de golpe, según el tipo del golpe que recibió la víctima en cada bajada de vida: rush attacks, smashes (los golpes fuertes que mandan lejos), otros cuerpo a cuerpo, ki blasts, blast skills (supers), ultimates, impactos, otros (agarres, ...).</p><details class="gmore"><summary>Más</summary><p>"Dentro de combos" = daño de los golpes conectados mientras el contador de combo del atacante era 2 o más, así que el primer golpe de un combo cuenta fuera. Porcentaje = tanto por ciento de todo el daño infligido.</p><details class="tech"><summary>Detalles técnicos</summary><p>Nuevo después de 1.8.0 (partidas antiguas: sin filas).</p></details></details></dd>
+<dt>Wild Sense</dt><dd><p>Activado = la activación de Blast Forte (actEXA1 / actEXA2) de un personaje cuya habilidad en esa ranura es Wild Sense (según la tabla de mejoras del juego).</p><details class="gmore"><summary>Más</summary><p>Counter conectado = mientras Wild Sense estaba armado, el personaje conectó un golpe de tipo cuerpo a cuerpo sin estar en un rush, smash, agarre o habilidad propia (una regla provisional hasta calibrar el id de acción propio del counter); superado = el personaje armado recibió un golpe que no era de ki (un counter de Percepción, un agarre).</p><details class="tech"><summary>Detalles técnicos</summary><p>Nuevo después de 1.8.0.</p></details></details></dd>
+<dt>Patadas, barridos, persecuciones</dt><dd><p>La <b>patada voladora</b> y el <b>barrido</b> (Grand Slash, el bajo) son ataques de la rush chain; <b>cargado</b> = el barrido se mantuvo pulsado.</p><details class="gmore"><summary>Más</summary><p><b>Bloqueado</b> = con guardia. Una <b>persecución</b> es el Dragon Homing, el dash tras mandar lejos al rival (no el vanishing attack); <b>% de acierto</b> = persecuciones que conectaron.</p><details class="tech"><summary>Detalles técnicos</summary><p>Nuevo después de 1.8.0 (partidas antiguas: sin filas).</p></details></details></dd>
+<dt>Golpes medios antes de SC</dt><dd><p>Cuántos golpes del rush del rival recibió un jugador (incluido el golpe contrarrestado, sin contar los bloqueados) antes de hacer super counter.</p><details class="gmore"><summary>Más</summary><p>Los counters dentro de intercambios de vanish / super counter (p. ej. contra un rush de seguimiento justo después de un vanish) siguen contando como super counters y en las guerras, pero no aquí: aparecen como <b>SC en intercambios</b> y marcados como "en intercambio" en la línea de tiempo. <b>Menos es mejor</b> (un counter más temprano). <b>Más temprano</b> = el mínimo de la partida. En la página de un rival: su media y la tuya en todas las partidas entre vosotros.</p><details class="tech"><summary>Detalles técnicos</summary><p>Desde la v1.7.3 solo cuentan los super counters contra una rush chain <b>desde neutral</b>: el rush empezó sin super counter, contraataque, vanish, vanishing attack / assault ni revenge counter de ningún lado (y sin final de guerra / intercambio) en los 1.5 s anteriores ni durante él.</p></details></details></dd>
+</dl></section>
+<section class="gsec" data-g="ui"><h2>Pantallas y botones</h2>
+<dl class="legend">
+<dt>Modo</dt><dd><p>Partida <span class="mode m1">Ranked</span>, <span class="mode">Rápida</span> o <span class="mode">Jugador</span> (sala); R / Rá / J en el móvil.</p></dd>
+<dt>Incidencias</dt><dd><p>Registro de incidencias (activo por defecto; <code>debug_incidents = 0</code> en <code>BT4RankedDetails.ini</code> lo desactiva): una partida online que terminó de forma anómala o tuvo un error de red recibe un <span class="dc">!</span> rojo y una línea en la página de Incidencias (código de error mostrado por el juego, fase del combate, tiempo desde el inicio / el KO, vida de ambos lados, ping, parones, puntos antes → después, los últimos 20 s).</p></dd>
+<dt>Personajes</dt><dd><p>Tu(s) personaje(s) contra los del rival (desde la v1.2.0; pasa el ratón para ver los nombres completos y PD).</p><details class="gmore"><summary>Más</summary><p><b>Individual</b> / <b>PD</b> = el formato de combate; el filtro Formato se aplica a todas las listas y a los totales.</p></details></dd>
+<dt>Línea de tiempo</dt><dd><p>Con <code>timeline = 1</code> (por defecto): vida de ambos lados (en batallas PD cada personaje es su propia línea; una línea discontinua marca el cambio), marcadores de eventos, bandas de parón, el ping (una línea blanca; oscura en el tema claro) con las bandas de calidad del juego y una envolvente mín/máx de 2 s, tu retraso de entrada (azul) y el suyo (naranja discontinuo), y tus FPS frente a los del rival.</p></dd>
+<dt>Botones de la línea de tiempo</dt><dd><p>Haz clic para mostrar u ocultar una línea; se recuerda en este navegador (todas las partidas usan la misma elección).</p><details class="gmore"><summary>Más</summary><p><b>▾ Vida</b> / <b>▾ Latencia</b> pliega el gráfico entero; los ejes se ajustan a lo que se muestra.</p></details></dd>
+<dt>Fijado</dt><dd><p>El botón de fijar de la fila de un rival (aparece al pasar el ratón) o de su página mantiene a ese rival en el bloque Fijados, arriba del todo en Rivales (sea cual sea el orden); los rivales fijados llevan una pequeña chincheta en la lista de partidas.</p><details class="gmore"><summary>Más</summary><p>Los fijados se guardan solo en este navegador (no en data.js), así que otro navegador o un almacenamiento del navegador borrado empieza sin ellos.</p></details></dd>
+<dt>Páginas</dt><dd><p>Las listas con más de 100 filas (partidas, las partidas contra un rival, muchos rivales o equipos) se dividen en páginas de 100; "Mostrando 101–200 de 1,234" cuenta las filas del filtro actual.</p></dd>
+<dt>Recargar</dt><dd><p>La página carga <code>data.js</code> una vez.</p><details class="gmore"><summary>Más</summary><p>Tras una partida, haz clic en <b>Recargar</b> al pie de la página (o pulsa F5).</p></details></dd>
+<dt>Compartir</dt><dd><p>Copia una imagen cuadrada de la partida al portapapeles (pégala en Discord); <b>Vista previa</b> la muestra con un botón Descargar PNG.</p></dd>
+</dl></section>
+</template>
+<template id="howto-src-es">
+<ul>
+<li>Abre <code>ranked_details\history\index.html</code> en tu navegador (doble clic). Funciona directamente desde el archivo y no carga nada de internet.</li>
+<li>El mod reescribe <code>data.js</code> al iniciar el juego y después de cada partida online real. La página lo lee una vez al abrirse: haz clic en <b>Recargar</b> al pie de la página (o pulsa F5) para ver las partidas nuevas; te quedas en la misma página.</li>
+<li>Las listas largas muestran 100 filas por página (‹ Anterior 1 2 3 … Siguiente ›); los filtros, la búsqueda y el orden siempre se aplican a todas las partidas. El número de página va en el enlace, así que recargar y atrás / adelante lo conservan.</li>
+<li><b>Partidas</b>: filtra por modo, formato y rival, haz clic en el título de una columna para ordenar y en una fila (o en Abrir, en la columna Vista completa) para abrir la página de la partida; la columna Steam abre el perfil de Steam del rival; ▾ en la columna Vista rápida despliega el resumen de la partida debajo de su fila (↑ / ↓ la mueven, Esc la pliega); elige 10, 20 o 50 partidas por página (se recuerda en este navegador). Un registro de una pelea que nunca existió (sin resultado, de pocos segundos) tiene un botón Borrar: se oculta en este navegador (Deshacer, o Restaurar todos debajo de la lista); el archivo de datos lo conserva. <b>Terminadas mal</b> reúne las partidas que acabaron de forma anómala. <b>Rivales</b>: una fila por rival (agrupados por Account ID, así que los jugadores que cambian de nombre siguen juntos); elige el orden en <i>Ordenar por</i>; la página de un rival tiene pestañas como una partida. <b>Personajes</b>: una tarjeta por personaje y equipo PD; haz clic en una para ver sus partidas. <b>Tú</b>: tus puntos de ranked en el tiempo, el % de victorias por semana y tus costumbres.</li>
+<li>Teclado: <kbd>/</kbd> busca un rival, <kbd>←</kbd> / <kbd>→</kbd> partida anterior / siguiente, <kbd>1</kbd>–<kbd>4</kbd> las pestañas de la partida, <kbd>Esc</kbd> vuelve a la lista, <kbd>?</kbd> todos los atajos. Cada página tiene su propio enlace (guárdalo en marcadores; el botón atrás del navegador funciona).</li>
+<li>Pon tu nombre exacto del juego en <code>data\my_name.txt</code> si alguna vez se elige mal al rival.</li>
+<li>Botones de la línea de tiempo: haz clic para mostrar u ocultar una línea; se recuerda en este navegador (la misma elección para todas las partidas; ▾ Vida / ▾ Latencia pliega un gráfico entero).</li>
+<li>Línea de tiempo: activa por defecto (<code>timeline = 1</code> en <code>BT4RankedDetails.ini</code>); las partidas registradas mientras estaba desactivada no tienen.</li>
+<li><code>refresh.bat</code> (opcional, necesita Python 3) reconstruye <code>data.js</code> a partir de <code>..\data\matches.jsonl</code> y abre la página.</li>
+</ul>
+</template>
+<template id="tips-src-es">
+fpsg|Tu media de 1 segundo tal como tu juego la envía al rival: el mismo número, muestreado igual que el suyo (en cada cambio, más o menos cada 3 s)
+fpso|Tu media de 1 segundo a partir de tus propios tiempos de fotograma (esta partida no tiene número de tu juego). No se cuentan las esperas al rival.
+fpsr|Lo informa el juego del rival: su media de 1 segundo, enviada como mucho cada 3 s, así que los tirones de un solo fotograma en su lado nunca aparecen
+dsg| (tu número tal como lo envía tu juego, muestreado como el suyo)
+dso| (tus propias ventanas de 1 s: esta partida no tiene número de tu juego)
+dst| (el número que informa su juego)
+cu|Una lectura de un solo fotograma justo al final de la partida (el netcode deteniéndose en el KO, registrada por una versión previa) no se cuenta como recuperación
+drop|Una caída = la media de 1 segundo por debajo de {0} fps{1}; los fotogramas lentos sueltos no se cuentan. Tiempo = cuánto estuvo por debajo (por debajo de 55 / 50: {2} / {3} s); fotogramas perdidos ≈ Σ (60 − fps) × tiempo, una estimación. El número del rival (y el tuyo tal como lo envía tu juego) se actualiza más o menos cada 3 s, así que los tirones cortos se suavizan. Parones ({4}): {5} durante sus caídas, {6} cerca de las tuyas, {7} sin caída en ningún lado (probablemente la conexión); una caída cuenta desde 1 s antes del informe que la mostró hasta 1 s después
+odl|El retraso de entrada del rival (media de la partida), de las cabeceras de sus paquetes
+loss|Paquetes del rival que solo llegaron mediante un reenvío (la primera copia se perdió o llegó tarde por el camino), contados por el propio netcode del juego: aproximadamente la pérdida de paquetes. Tus paquetes perdidos de camino a él cuentan en su lado. La calidad de señal del juego baja un escalón al 5 %.
+</template>
+<template id="tlmk-src-es"><div class="symleg"><p class="muted small">Marcadores (azul = tú, fila inferior · naranja = rival, fila superior)</p><ul class="symgrid"><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,-4.5L4.5,0L0,4.5L-4.5,0Z"/></svg><span>Super</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,-5.2L1.2,-1.6L4.9,-1.6L1.9,0.6L3,4.2L0,2L-3,4.2L-1.9,0.6L-4.9,-1.6L-1.2,-1.6Z"/></svg><span>Ultimate</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-5.85,0a5.85,5.85 0 1,0 11.7,0a5.85,5.85 0 1,0 -11.7,0ZM-4.27,0a4.27,4.27 0 1,0 8.55,0a4.27,4.27 0 1,0 -8.55,0ZM0,-3.2L0.7,-1L3.1,-1L1.2,0.4L1.9,2.6L0,1.3L-1.9,2.6L-1.2,0.4L-3.1,-1L-0.7,-1Z"/></svg><span>Final especial</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,-4.5L4.5,3.6L-4.5,3.6Z"/></svg><span>Super counter</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,4.5L4.5,-3.6L-4.5,-3.6Z"/></svg><span>Vanish</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-3.6L0,0L-4.5,3.6M0,-3.6L4.5,0L0,3.6"/></svg><span>Vanishing attack (persecución)</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,0a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0ZM-0.9,0H4.5M1.13,-3.15L4.5,0L1.13,3.15"/></svg><span>Vanishing assault</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M1.35,-4.5L-3.15,0.67H0L-1.35,4.5L3.15,-0.67H0Z"/></svg><span>Choque ganado</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-3.6,-3.6h7.2v7.2h-7.2Z"/></svg><span>Revenge counter</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-4.5h9v9h-9ZM-2.25,0H2.25M0,-2.25V2.25"/></svg><span>Revenge counter atrapado por superpercepción</span></li><li><svg class="lg" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,0a4.5,4.5 0 1,0 9,0a4.5,4.5 0 1,0 -9,0Z"/></svg><span>Sparking</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-4.5L4.5,4.5M4.5,-4.5L-4.5,4.5"/></svg><span>Rotura de guardia</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-5.4,0a5.4,5.4 0 1,0 10.8,0a5.4,5.4 0 1,0 -10.8,0ZM-2.25,-2.25L2.25,2.25M2.25,-2.25L-2.25,2.25"/></svg><span>KO</span></li><li><svg class="lg o" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M-4.5,-3.6v7.2M-4.5,0H4.5M4.5,-3.6v7.2"/></svg><span>Guerras (carril superior): del primer eslabón al golpe decisivo, en el color del ganador (gris = sin resolver)</span></li></ul><p class="muted small">Línea discontinua = cambio / transformación · cada personaje en el campo tiene su propia línea de vida · parón = el juego esperando al rival</p></div></template>
+<template id="tlfps-src-es"><p class="tl-note small"><b>Azul</b> = tus FPS · <b>naranja discontinuo</b> = FPS del rival (ambos tal como los informa el juego, más o menos cada 3 s) · <b>rojo</b> = parón · <b>sombreado naranja</b> = sus caídas · <b>morado</b> = recuperación · <b>marcas oscuras</b> = un tirón de carga: un fotograma largo en tu PC en un cambio / transformación (no es una caída de FPS; la media de 1 s lo oculta) · el rival te esperó (estimado): <svg class="lg ow" viewBox="-7 -7 14 14" aria-hidden="true"><path class="pc" d="M0,4.5L4.5,-3.6L-4.5,-3.6Z"/></svg> tras un tirón de carga en tu PC, <svg class="lg ow" viewBox="-7 -7 14 14" aria-hidden="true"><path d="M0,4.5L4.5,-3.6L-4.5,-3.6Z"/></svg> tus entradas llegaron tarde (la red o su lado) · botones: <b>Cada segundo</b>, <b>Tiempo real</b></p></template>
+<template id="odlnote-src-es"><p class="tl-note small">Su retraso de entrada reacciona a lo regular que le llegan tus entradas: un retraso del rival estable suele significar que tu ping y tus FPS fueron estables; uno que sube, que tus entradas a veces llegaron tarde, casi siempre justo después de un fotograma largo en tu PC mientras cargaba un personaje.</p></template>
+<template id="catchup-src-es"><details class="xpl"><summary>¿Qué es la recuperación?</summary><ul>
+<li>El juego usa <b>lockstep</b>: ambos juegos avanzan fotograma a fotograma, y cada uno necesita la entrada del otro para cada fotograma. Tu entrada se envía unos fotogramas por adelantado: ese es el retraso de entrada.</li>
+<li>Cuando las entradas llegan demasiado tarde (un PC perdió fotogramas o los paquetes se retrasaron), el juego al que le faltan espera: un <b>parón</b>. Cada parón agranda en un fotograma la ventana de retraso del juego que espera.</li>
+<li>Cuando una ventana de retraso llega a unos 21 fotogramas (350 ms), el netcode pasa ambos juegos al <b>modo de recuperación</b>: tu entrada se toma y se envía solo cada 2 fotogramas (cada 3 a partir de 40 fotogramas, cada 4 a partir de 60) y se repite en los fotogramas intermedios. Menos paquetes, entrada más tosca. Sigue activo hasta que termina la partida.</li>
+<li>Mientras tus entradas llegan tarde, es <b>probable</b> que el rival tenga que esperarlas: un parón en su pantalla. "El rival te esperó" es una estimación de eso (un límite inferior).</li>
+<li>Que haya recuperación en una partida significa que la conexión o un PC tuvo mucho lag en algún momento: mira en el gráfico de FPS si hubo caídas en tu lado.</li>
+<li>Un parón mientras <b>sus</b> FPS bajan (línea naranja discontinua) probablemente fue culpa de su PC; los parones mientras ambas líneas de FPS se mantienen cerca de 60 fueron la conexión.</li>
+</ul></details></template>
+<template id="incnote-src-es"><p class="small muted">Partidas online que terminaron de forma anómala: abandono, desconexión, error de red o rendición (se desactiva con <code>debug_incidents = 0</code>). <b>Código</b> = el código de error del juego (2E795EC5 = desincronización, 3794033B = el rival se fue). Abre <i>Código del juego y registro completo</i> en una tarjeta para ver los detalles.</p></template>
+<template id="tlnone-src-es"><p class="tl-note small">No hay línea de tiempo para esta partida (se registró con <b>timeline = 0</b>, o antes de que la 1.7.2 la activara por defecto). Con <b>timeline = 1</b> en <code>BT4RankedDetails.ini</code> (recarga en caliente) cada partida nueva tendrá una.</p></template>
+<template id="nocombat-src-es"><p class="muted small">No hay estadísticas de combate para esta partida (se registró antes de la v1.2.0 o con combat_tracking = 0).</p></template>
+<template id="nochars-src-es"><p class="notice">Aún no hay datos de personajes para el filtro actual. Los personajes se registran desde la v1.2.0 (characters_lookup = 1).</p></template>
+<!-- /Spanish -->
+<!-- written by the mod after every real online match (window.SZ_MATCHES, window.SZ_GENERATED); read once on page load (Reload button / F5 for new data) -->
+<script id="szdata" src="data.js"></script>
+
+</body>
+</html>
