@@ -6,7 +6,10 @@
 #include <algorithm>
 using std::min;
 using std::max;
+#pragma warning(push)
+#pragma warning(disable: 4458)
 #include <gdiplus.h>
+#pragma warning(pop)
 #include <atomic>
 #include <thread>
 #include <cstdio>

@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace bt4rd {
 
@@ -61,8 +62,6 @@ struct CombatSide {
     double sparking_s = 0.0;
     int switches = 0;
     int counters = 0;
-    int first_attack = 0;
-    int boosts = 0;
     int blast_spent = 0;
     double charge_s = 0.0;
     int hits_total = 0;
@@ -70,6 +69,9 @@ struct CombatSide {
 
 struct DirectFighterTracker {
     int last_hp = -1;
+    int stable_hp = -1;
+    int pending_dir = 0;   // -1 = pending damage, +1 = pending heal
+    int pending_ticks = 0;
     int last_chara = -1;
     int last_active = -1;
     int last_blast = -1;
@@ -80,6 +82,16 @@ struct DirectFighterTracker {
     int last_msg_seq = -1;
     int64_t switch_grace_until_ms = 0;
 };
+
+inline bool same_name_ci(const std::string& a, const std::string& b) {
+    if (a.empty() || b.empty()) return false;
+    return lower_ascii(trim(a)) == lower_ascii(trim(b));
+}
+
+inline bool is_placeholder_player_name(const std::string& s) {
+    std::string l = lower_ascii(trim(s));
+    return l.empty() || l == "player 1" || l == "player 2";
+}
 
 inline std::string json_escape(const std::string& s) {
     std::string o;
@@ -273,7 +285,7 @@ public:
 
         std::string opp, oid, reg, rset;
         if (json_extract_string(res, "opponent_name", opp) || json_extract_string(res, "rival", opp) || json_extract_string(res, "nickname", opp)) {
-            if (!opp.empty() && opp != self_name_) session_.opponent = opp;
+            if (!is_placeholder_player_name(opp) && !same_name_ci(opp, self_name_)) session_.opponent = opp;
         }
         if (json_extract_string(res, "opponent_id", oid) || json_extract_string(res, "account_id", oid)) {
             if (!oid.empty()) session_.opponent_id = oid;
@@ -296,13 +308,13 @@ public:
         int opp = 1 - me;
 
         // 1. Player names directly from bt3_net_player_name(0/1)
-        if (!snap.player_names[me].empty() && snap.player_names[me] != "Player 1" && snap.player_names[me] != "Player 2") {
-            self_name_ = snap.player_names[me];
+        if (!is_placeholder_player_name(snap.player_names[me])) {
+            self_name_ = trim(snap.player_names[me]);
         }
-        if (!snap.player_names[opp].empty() && snap.player_names[opp] != self_name_ &&
-            snap.player_names[opp] != "Player 1" && snap.player_names[opp] != "Player 2") {
-            if (session_.opponent != snap.player_names[opp]) {
-                session_.opponent = snap.player_names[opp];
+        if (!is_placeholder_player_name(snap.player_names[opp]) && !same_name_ci(snap.player_names[opp], self_name_)) {
+            std::string clean_opp = trim(snap.player_names[opp]);
+            if (session_.opponent != clean_opp) {
+                session_.opponent = clean_opp;
                 log_line("opponent detected via bt3_net_player_name: " + session_.opponent);
             }
         }
@@ -315,14 +327,25 @@ public:
         // Detect battle start / end transitions
         if (snap.in_battle && !session_.saw_battle) {
             session_.saw_battle = true;
+            session_.had_battle = true;
             session_.direct_trk[0] = DirectFighterTracker{};
             session_.direct_trk[1] = DirectFighterTracker{};
             session_.last_hp_sample_ms = 0;
         } else if (!snap.in_battle && session_.saw_battle) {
-            // Battle just ended -> finalize pending combos & infer result if not already set
+            // Battle just ended -> flush any pending damage, finalize combos & infer result
             for (int s = 0; s < 2; ++s) {
                 auto& tr = session_.direct_trk[s];
                 CombatSide& cs = (s == me) ? session_.combat_me : session_.combat_opp;
+                CombatSide& other_cs = (s == me) ? session_.combat_opp : session_.combat_me;
+                if (tr.stable_hp > 0 && tr.last_hp >= 0 && tr.last_hp < tr.stable_hp) {
+                    int rem = tr.stable_hp - tr.last_hp;
+                    if (rem > 0 && rem < 80000) {
+                        other_cs.dmg += rem;
+                        cs.taken += rem;
+                        ++other_cs.hits_total;
+                    }
+                    tr.stable_hp = tr.last_hp;
+                }
                 if (tr.last_combo_hits >= 2) {
                     ++cs.combo_n;
                     cs.combo_sum += tr.last_combo_hits;
@@ -373,21 +396,55 @@ public:
 
             if (tr.last_active >= 0 && f.active != tr.last_active) {
                 tr.switch_grace_until_ms = t_ms + 2000;
+                tr.stable_hp = -1;
+                tr.pending_dir = 0;
+                tr.pending_ticks = 0;
                 ++cs.switches;
                 session_.tl_ev.push_back({rel_ms, tag, "switch", char_name_str(f.chara)});
             } else if (tr.last_chara >= 0 && f.chara >= 0 && f.chara != tr.last_chara) {
                 tr.switch_grace_until_ms = t_ms + 2000;
+                tr.stable_hp = -1;
+                tr.pending_dir = 0;
+                tr.pending_ticks = 0;
             }
 
-            if (tr.last_hp >= 0 && t_ms > tr.switch_grace_until_ms && f.hp_max > 0) {
-                int d = f.hp - tr.last_hp;
-                if (d < 0 && -d < 80000) {
-                    other_cs.dmg += (-d);
-                    cs.taken += (-d);
-                    ++other_cs.hits_total;
-                } else if (d > 0 && d < 15000) {
-                    cs.healed += d;
-                    ++cs.heal_n;
+            // Rollback-safe HP delta tracking: require 4 consecutive ticks (~200 ms) to confirm damage
+            // (immediate on KO) and 10 consecutive ticks (~500 ms) + >=300 HP to confirm real healing.
+            if (f.hp_max > 0 && f.hp >= 0) {
+                if (t_ms <= tr.switch_grace_until_ms || tr.stable_hp < 0) {
+                    tr.stable_hp = f.hp;
+                    tr.pending_dir = 0;
+                    tr.pending_ticks = 0;
+                } else {
+                    int d = f.hp - tr.stable_hp;
+                    if (d < 0) {
+                        if (tr.pending_dir == -1) ++tr.pending_ticks;
+                        else { tr.pending_dir = -1; tr.pending_ticks = 1; }
+                        if (f.hp == 0 || tr.pending_ticks >= 4) {
+                            int dealt = tr.stable_hp - f.hp;
+                            if (dealt > 0 && dealt < 80000) {
+                                other_cs.dmg += dealt;
+                                cs.taken += dealt;
+                                ++other_cs.hits_total;
+                            }
+                            tr.stable_hp = f.hp;
+                            tr.pending_dir = 0;
+                            tr.pending_ticks = 0;
+                        }
+                    } else if (d >= 300 && d < 15000) {
+                        if (tr.pending_dir == 1) ++tr.pending_ticks;
+                        else { tr.pending_dir = 1; tr.pending_ticks = 1; }
+                        if (tr.pending_ticks >= 10) {
+                            cs.healed += d;
+                            ++cs.heal_n;
+                            tr.stable_hp = f.hp;
+                            tr.pending_dir = 0;
+                            tr.pending_ticks = 0;
+                        }
+                    } else {
+                        tr.pending_dir = 0;
+                        tr.pending_ticks = 0;
+                    }
                 }
             }
             tr.last_hp = f.hp;
@@ -422,16 +479,13 @@ public:
             }
             tr.last_hit_seq = f.hit_seq;
 
-            // Messages: 0=Counter, 1=MAX POWER, 3=First Attack, 4=BOOST
+            // Messages: 0=Counter, 1=MAX POWER, 3=First Attack
             if (tr.last_msg_seq >= 0 && f.message_seq != tr.last_msg_seq) {
                 if (f.message == 0) {
                     ++cs.counters;
                     session_.tl_ev.push_back({rel_ms, tag, "super_counter", "Counter!"});
                 } else if (f.message == 3) {
-                    ++cs.first_attack;
                     session_.tl_ev.push_back({rel_ms, tag, "first_attack", "First Attack!"});
-                } else if (f.message == 4) {
-                    ++cs.boosts;
                 }
             }
             tr.last_msg_seq = f.message_seq;
@@ -517,6 +571,7 @@ private:
     struct Session {
         bool active = false;
         bool saw_battle = false;
+        bool had_battle = false;
         std::string match_id;
         std::string start_local;
         double start_unix = 0.0;
@@ -807,6 +862,11 @@ private:
         std::string end_local = now_local_iso(false);
         double dur_s = std::max(0.1, end_unix - session_.start_unix);
 
+        if (!session_.had_battle && dur_s < 20.0 && !session_.has_incident) {
+            log_line("match skipped (aborted handshake / no battle, " + std::to_string((int)dur_s) + "s): " + session_.match_id);
+            return;
+        }
+
         auto rtts = session_.rtt_samples;
         std::sort(rtts.begin(), rtts.end());
         double rtt_sum = 0; for (int x : rtts) rtt_sum += x;
@@ -847,7 +907,7 @@ private:
 
         std::ostringstream j;
         j << std::fixed << std::setprecision(1);
-        j << "{\"schema_version\":1,\"writer\":\"BT4 Rankeds Details 1.1.0\""
+        j << "{\"schema_version\":1,\"writer\":\"BT4 Rankeds Details 1.2.0\""
           << ",\"match_id\":" << json_str(session_.match_id)
           << ",\"start_local\":" << json_str(session_.start_local)
           << ",\"end_local\":" << json_str(end_local)
@@ -955,7 +1015,7 @@ private:
 
         if (cfg.debug_incidents && session_.has_incident) {
             std::ostringstream inc;
-            inc << "{\"v\":1,\"writer\":\"BT4 Rankeds Details 1.1.0\",\"time_local\":" << json_str(end_local)
+            inc << "{\"v\":1,\"writer\":\"BT4 Rankeds Details 1.2.0\",\"time_local\":" << json_str(end_local)
                 << ",\"match_id\":" << json_str(session_.match_id)
                 << ",\"kind\":" << json_str(session_.incident_kind)
                 << ",\"code_name\":" << json_str(session_.incident_detail)
@@ -970,15 +1030,16 @@ private:
                  " avg_ms=" + std::to_string((int)rtt_avg) + " dmg=" + std::to_string(session_.combat_me.dmg) + "/" + std::to_string(session_.combat_opp.dmg));
     }
 
-    bool write_timeline_files(int dur_ms) {
+    std::string serialize_timeline(int dur_ms, size_t hp_stride, size_t net_stride, size_t max_ev, bool truncated) const {
         std::ostringstream t;
         t << std::fixed << std::setprecision(1);
         t << "{\"v\":1,\"match_id\":" << json_str(session_.match_id)
           << ",\"dur_ms\":" << dur_ms << ",\"me_side\":" << session_.my_side;
+        if (truncated) t << ",\"truncated\":true";
 
         t << ",\"rtt\":[";
-        for (size_t i = 0; i < session_.tl_rtt.size(); ++i) {
-            if (i) t << ",";
+        for (size_t i = 0, out_n = 0; i < session_.tl_rtt.size(); i += net_stride, ++out_n) {
+            if (out_n) t << ",";
             t << "[" << session_.tl_rtt[i].first << "," << session_.tl_rtt[i].second << "]";
         }
         t << "],\"delay\":[";
@@ -987,8 +1048,8 @@ private:
             t << "[" << session_.tl_delay[i].first << "," << session_.tl_delay[i].second << "]";
         }
         t << "],\"opp_delay\":[";
-        for (size_t i = 0; i < session_.tl_rb.size(); ++i) {
-            if (i) t << ",";
+        for (size_t i = 0, out_n = 0; i < session_.tl_rb.size(); i += net_stride, ++out_n) {
+            if (out_n) t << ",";
             t << "[" << session_.tl_rb[i].first << "," << session_.tl_rb[i].second << "]";
         }
         t << "],\"stalls\":[";
@@ -1000,9 +1061,13 @@ private:
         if (!session_.tl_hp_me.empty() || !session_.tl_hp_opp.empty()) {
             auto emit_hp = [&](const auto& v) {
                 t << "[";
-                for (size_t i = 0; i < v.size(); ++i) {
-                    if (i) t << ",";
+                for (size_t i = 0, out_n = 0; i < v.size(); i += hp_stride, ++out_n) {
+                    if (out_n) t << ",";
                     t << "[" << std::get<0>(v[i]) << "," << std::get<1>(v[i]) << "," << json_str(std::get<2>(v[i])) << "]";
+                }
+                if (v.size() > 1 && ((v.size() - 1) % hp_stride) != 0) {
+                    const auto& last = v.back();
+                    t << ",[" << std::get<0>(last) << "," << std::get<1>(last) << "," << json_str(std::get<2>(last)) << "]";
                 }
                 t << "]";
             };
@@ -1010,9 +1075,10 @@ private:
             t << ",\"opp\":"; emit_hp(session_.tl_hp_opp);
             t << "}";
         }
-        if (!session_.tl_ev.empty()) {
+        if (!session_.tl_ev.empty() && max_ev > 0) {
+            size_t lim = std::min(session_.tl_ev.size(), max_ev);
             t << ",\"ev\":[";
-            for (size_t i = 0; i < session_.tl_ev.size(); ++i) {
+            for (size_t i = 0; i < lim; ++i) {
                 if (i) t << ",";
                 t << "[" << std::get<0>(session_.tl_ev[i]) << "," << json_str(std::get<1>(session_.tl_ev[i]))
                   << "," << json_str(std::get<2>(session_.tl_ev[i])) << "," << json_str(std::get<3>(session_.tl_ev[i])) << "]";
@@ -1020,22 +1086,32 @@ private:
             t << "]";
         }
         if (!session_.tl_fps_1s.empty()) {
-            t << ",\"fps\":{\"ms\":1000,\"t0\":0,\"target\":60,\"min\":[";
-            for (size_t i = 0; i < session_.tl_fps_1s.size(); ++i) {
-                if (i) t << ",";
+            size_t fps_stride = std::max<size_t>(1, net_stride);
+            t << ",\"fps\":{\"ms\":" << (1000 * fps_stride) << ",\"t0\":0,\"target\":60,\"min\":[";
+            for (size_t i = 0, out_n = 0; i < session_.tl_fps_1s.size(); i += fps_stride, ++out_n) {
+                if (out_n) t << ",";
                 t << session_.tl_fps_1s[i];
             }
-            t << "],\"avg_ms\":1000,\"avg\":[";
-            for (size_t i = 0; i < session_.tl_fps_1s.size(); ++i) {
-                if (i) t << ",";
+            t << "],\"avg_ms\":" << (1000 * fps_stride) << ",\"avg\":[";
+            for (size_t i = 0, out_n = 0; i < session_.tl_fps_1s.size(); i += fps_stride, ++out_n) {
+                if (out_n) t << ",";
                 t << session_.tl_fps_1s[i];
             }
             t << "]}";
         }
         t << "}";
+        return t.str();
+    }
 
-        std::string raw = t.str();
-        if (raw.size() > 65536) raw.resize(65000);
+    bool write_timeline_files(int dur_ms) {
+        size_t hp_stride = 1, net_stride = 1, max_ev = session_.tl_ev.size();
+        std::string raw = serialize_timeline(dur_ms, hp_stride, net_stride, max_ev, false);
+        for (int pass = 0; pass < 8 && raw.size() > 65536; ++pass) {
+            hp_stride *= 2;
+            net_stride *= 2;
+            max_ev = (max_ev > 16) ? (max_ev / 2) : 0;
+            raw = serialize_timeline(dur_ms, hp_stride, net_stride, max_ev, true);
+        }
 
         std::wstring wid(session_.match_id.begin(), session_.match_id.end());
         write_file_atomic(tl_data_dir_ + L"\\" + wid + L".json", raw);
@@ -1046,7 +1122,7 @@ private:
     void write_state_json() {
         std::ostringstream s;
         s << std::fixed << std::setprecision(1)
-          << "{\"writer\":\"BT4 Rankeds Details 1.1.0\""
+          << "{\"writer\":\"BT4 Rankeds Details 1.2.0\""
           << ",\"time\":" << json_str(now_local_iso())
           << ",\"in_session\":" << (live_.in_session ? "true" : "false")
           << ",\"online\":" << (live_.online ? "true" : "false")
@@ -1071,19 +1147,23 @@ private:
 
     void rebuild_history_js() {
         std::vector<std::string> matches;
+        std::unordered_set<std::string> seen_ids;
         {
             std::ifstream f(data_dir_ + L"\\matches.jsonl");
             std::string line;
             while (std::getline(f, line)) {
                 line = trim(line);
-                if (line.size() < 2 || line.front() != '{') continue;
+                if (line.size() < 2 || line.front() != '{' || line.back() != '}') continue;
                 std::string ts, mid;
                 json_extract_string(line, "end_local", ts);
                 json_extract_string(line, "match_id", mid);
+                if (!mid.empty() && !seen_ids.insert(mid).second) continue;
                 std::string patched = line.substr(0, line.size() - 1);
-                if (!ts.empty()) patched += ",\"ts\":" + json_str(ts);
+                if (!ts.empty() && line.find("\"ts\":") == std::string::npos) {
+                    patched += ",\"ts\":" + json_str(ts);
+                }
                 size_t rp = line.find("\"rtt_ms\":{");
-                if (rp != std::string::npos) {
+                if (rp != std::string::npos && line.find("\"avg_ms\":") == std::string::npos) {
                     size_t re = line.find('}', rp);
                     if (re != std::string::npos) {
                         std::string sub = line.substr(rp, re - rp + 1);
@@ -1102,7 +1182,7 @@ private:
                         grab_num("sd",  "sd_ms");
                     }
                 }
-                if (line.find("\"timeline\":") != std::string::npos && !mid.empty()) {
+                if (line.find("\"timeline\":") != std::string::npos && line.find("\"timeline_file\":") == std::string::npos && !mid.empty()) {
                     patched += ",\"timeline_file\":" + json_str("timelines/" + mid + ".js");
                 }
                 patched += "}";
@@ -1126,7 +1206,7 @@ private:
             << "window.SZ_GENERATED = " << json_str(gen) << ";\n"
             << "window.SZ_META = {\n"
             << "  \"generated\": " << json_str(gen) << ",\n"
-            << "  \"writer\": \"BT4 Rankeds Details 1.1.0\",\n"
+            << "  \"writer\": \"BT4 Rankeds Details 1.2.0\",\n"
             << "  \"source\": \"jsonl\",\n"
             << "  \"log_missing\": false,\n"
             << "  \"csv_present\": false,\n"

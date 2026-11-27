@@ -46,6 +46,7 @@ struct Bt4FighterSnap {
 struct Bt4BattleSnap {
     bool in_battle = false;
     bool hud_shown = false;
+    int local_side = 0;
     Bt4FighterSnap sides[2];
     std::string player_names[2];
 };
@@ -243,6 +244,7 @@ inline bool safe_read_net_stats(Bt4Bindings& b, Bt4NetMeterStats& out, bool& out
 struct Bt4BattlePod {
     bool in_battle = false;
     bool hud_shown = false;
+    int local_side = 0;
     Bt4FighterSnap sides[2];
     char player_names[2][64]{};
 };
@@ -255,6 +257,9 @@ inline bool safe_read_battle_pod(Bt4Bindings& b, Bt4BattlePod& out) {
             out.sides[s].chara = -1;
             out.sides[s].message = -1;
             for (int m = 0; m < 5; ++m) out.sides[s].member_charas[m] = -1;
+        }
+        if (b.net_local_side) {
+            out.local_side = b.net_local_side();
         }
         if (b.net_player_name) {
             for (int s = 0; s < 2; ++s) {
@@ -323,6 +328,7 @@ inline bool safe_read_battle_and_names(Bt4Bindings& b, Bt4BattleSnap& out) {
     if (!safe_read_battle_pod(b, pod)) return false;
     out.in_battle = pod.in_battle;
     out.hud_shown = pod.hud_shown;
+    out.local_side = pod.local_side;
     out.sides[0] = pod.sides[0];
     out.sides[1] = pod.sides[1];
     out.player_names[0] = pod.player_names[0];

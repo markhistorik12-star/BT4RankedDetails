@@ -1,11 +1,9 @@
-import os, shutil
+import argparse
+import os
+import shutil
 from PIL import Image, ImageDraw, ImageFont
 
-SZ_CHARS = r'G:\Programacion\SparkingRankedDetails-v1.11.0-AllInOne\Mods\SparkingRankedDetails\history\chars'
-BT4_TSV  = r'G:\Jueguitos\BT4decomp-windows-x64\BT4RankedDetails\data\characters.tsv'
-CUSTOM   = r'G:\Jueguitos\BT4decomp-windows-x64\BT4RankedDetails\custom_chars'
-OUT_REPO = r'G:\Jueguitos\BT4decomp-windows-x64\BT4RankedDetails\history\chars'
-OUT_GAME = r'G:\Jueguitos\BT4decomp-windows-x64\BT4decomp\ranked_details\history\chars'
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # BT4 chara_id -> Sparking! ZERO portrait stem (Spike Chunsoft shared numbering)
 BT4_TO_SZ = {
@@ -41,10 +39,10 @@ BT4_TO_SZ = {
     158: '0510_00', 159: '0032_30', 160: '0032_31',
 }
 
+
 def make_fallback_badge(name, out_path):
     img = Image.new('RGBA', (96, 96), (18, 26, 44, 255))
     d = ImageDraw.Draw(img)
-    # Color accent from name hash
     h = sum(ord(c) * (i + 7) for i, c in enumerate(name)) % 360
     pal = [(58, 130, 246), (234, 148, 36), (168, 85, 247), (34, 197, 94), (239, 68, 68), (20, 184, 166)]
     col = pal[h % len(pal)]
@@ -60,47 +58,50 @@ def make_fallback_badge(name, out_path):
     d.text(((96 - tw) / 2, (96 - th) / 2 - 4), initials, fill=(240, 246, 255, 255), font=font)
     img.save(out_path, 'WEBP', quality=85)
 
-os.makedirs(OUT_REPO, exist_ok=True)
-os.makedirs(OUT_GAME, exist_ok=True)
 
-mapped = 0
-custom = 0
-fallback = 0
+def main():
+    ap = argparse.ArgumentParser(description='Generate 161 BT4 character icons for history/chars/.')
+    ap.add_argument('--tsv', default=os.path.join(REPO_DIR, 'data', 'characters.tsv'), help='Path to characters.tsv')
+    ap.add_argument('--custom', default=os.path.join(REPO_DIR, 'custom_chars'), help='Optional custom_chars/ folder')
+    ap.add_argument('--sz-chars', default='', help='Optional SparkingRankedDetails/history/chars folder for HD portraits')
+    ap.add_argument('--out', default=os.path.join(REPO_DIR, 'history', 'chars'), help='Output chars/ directory')
+    args = ap.parse_args()
 
-for line in open(BT4_TSV, encoding='utf-8'):
-    line = line.strip()
-    if not line or line.startswith('#'):
-        continue
-    cid_s, name = line.split('\t', 1)
-    cid = int(cid_s)
-    key = f'{cid:03d}'
-    dst_repo = os.path.join(OUT_REPO, f'{key}.webp')
-    dst_game = os.path.join(OUT_GAME, f'{key}.webp')
+    os.makedirs(args.out, exist_ok=True)
+    mapped = custom = fallback = 0
 
-    # Priority 1: user custom icon in custom_chars/<000>.png or .webp
-    used = False
-    if os.path.isdir(CUSTOM):
-        for ext in ('.webp', '.png', '.jpg'):
-            cp = os.path.join(CUSTOM, f'{key}{ext}')
-            if os.path.isfile(cp):
-                Image.open(cp).convert('RGBA').resize((96, 96), Image.Resampling.LANCZOS).save(dst_repo, 'WEBP', quality=88)
-                custom += 1
+    for line in open(args.tsv, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        cid_s, name = line.split('\t', 1)
+        cid = int(cid_s)
+        key = f'{cid:03d}'
+        dst = os.path.join(args.out, f'{key}.webp')
+
+        used = False
+        if os.path.isdir(args.custom):
+            for ext in ('.webp', '.png', '.jpg'):
+                cp = os.path.join(args.custom, f'{key}{ext}')
+                if os.path.isfile(cp):
+                    Image.open(cp).convert('RGBA').resize((96, 96), Image.Resampling.LANCZOS).save(dst, 'WEBP', quality=88)
+                    custom += 1
+                    used = True
+                    break
+
+        if not used and args.sz_chars and cid in BT4_TO_SZ:
+            sp = os.path.join(args.sz_chars, BT4_TO_SZ[cid] + '.webp')
+            if os.path.isfile(sp):
+                shutil.copy2(sp, dst)
+                mapped += 1
                 used = True
-                break
 
-    # Priority 2: matched HD portrait from Sparking! ZERO
-    if not used and cid in BT4_TO_SZ:
-        sp = os.path.join(SZ_CHARS, BT4_TO_SZ[cid] + '.webp')
-        if os.path.isfile(sp):
-            shutil.copy2(sp, dst_repo)
-            mapped += 1
-            used = True
+        if not used:
+            make_fallback_badge(name, dst)
+            fallback += 1
 
-    # Priority 3: clean styled fallback badge
-    if not used:
-        make_fallback_badge(name, dst_repo)
-        fallback += 1
+    print(f'Generated {mapped + custom + fallback} BT4 character icons -> {args.out} ({mapped} HD, {custom} custom, {fallback} badges)')
 
-    shutil.copy2(dst_repo, dst_game)
 
-print(f'Generated 161 BT4 character icons: {mapped} HD portraits, {custom} custom, {fallback} styled badges')
+if __name__ == '__main__':
+    main()

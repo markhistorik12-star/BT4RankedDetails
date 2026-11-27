@@ -15,7 +15,7 @@ call "%VCVARS%" >nul
 if not exist build mkdir build
 
 echo [1/2] Building build\winmm.dll (x64 Release)...
-cl /nologo /std:c++20 /O2 /EHsc /W3 /MD /DNOMINMAX /DUNICODE /D_UNICODE /LD ^
+cl /nologo /std:c++20 /O2 /EHsc /W4 /MD /DNOMINMAX /DUNICODE /D_UNICODE /LD ^
    src\winmm_proxy.cpp ^
    /Fe:build\winmm.dll /Fo:build\ ^
    /link /DEF:src\winmm.def user32.lib gdi32.lib gdiplus.lib winhttp.lib
@@ -25,7 +25,7 @@ if errorlevel 1 (
 )
 
 echo [2/2] Building build\test_telemetry.exe...
-cl /nologo /std:c++20 /O2 /EHsc /W3 /MD /DNOMINMAX /DUNICODE /D_UNICODE ^
+cl /nologo /std:c++20 /O2 /EHsc /W4 /MD /DNOMINMAX /DUNICODE /D_UNICODE ^
    tests\test_telemetry.cpp ^
    /Fe:build\test_telemetry.exe /Fo:build\ ^
    /link user32.lib gdi32.lib winhttp.lib

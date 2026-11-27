@@ -30,7 +30,6 @@ struct Config {
     bool combat_tracking = true;
     bool timeline = true;
     bool fps_tracking = true;
-    bool offline_log = false;
 
     // [Advanced]
     bool hook_winhttp = true;
@@ -38,7 +37,6 @@ struct Config {
 
     // [Debug]
     bool debug_incidents = true;
-    bool verbose_log = false;
 
     FILETIME last_write{};
 };
@@ -59,7 +57,7 @@ inline void write_default_ini(const std::wstring& path) {
     if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return;
     std::ofstream f(path, std::ios::binary);
     if (!f) return;
-    f << "; BT4 Ranked Details configuration (auto-reloaded every ~1 s while the game runs)\n\n"
+    f << "; BT4 Rankeds Details configuration (auto-reloaded every ~1 s while the game runs)\n\n"
          "[Display]\n"
          "display = 1\n"
          "show_always = 0\n"
@@ -79,14 +77,12 @@ inline void write_default_ini(const std::wstring& path) {
          "rank_lookup = 1\n"
          "combat_tracking = 1\n"
          "timeline = 1\n"
-         "fps_tracking = 1\n"
-         "offline_log = 0\n\n"
+         "fps_tracking = 1\n\n"
          "[Advanced]\n"
          "hook_winhttp = 1\n"
          "aob_scan = 1\n\n"
          "[Debug]\n"
-         "debug_incidents = 1\n"
-         "verbose_log = 0\n";
+         "debug_incidents = 1\n";
 }
 
 inline bool load_config_if_changed(const std::wstring& path, Config& cfg, bool force = false) {
@@ -133,11 +129,9 @@ inline bool load_config_if_changed(const std::wstring& path, Config& cfg, bool f
         else if (k == "combat_tracking") cfg.combat_tracking = as_bool();
         else if (k == "timeline") cfg.timeline = as_bool();
         else if (k == "fps_tracking") cfg.fps_tracking = as_bool();
-        else if (k == "offline_log") cfg.offline_log = as_bool();
         else if (k == "hook_winhttp") cfg.hook_winhttp = as_bool();
         else if (k == "aob_scan") cfg.aob_scan = as_bool();
         else if (k == "debug_incidents") cfg.debug_incidents = as_bool();
-        else if (k == "verbose_log") cfg.verbose_log = as_bool();
     }
     return true;
 }
